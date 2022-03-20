@@ -1,3 +1,6 @@
+
+COLUMNS
+
 codes: G = got, N = need, X = ignore, U = unexplored, M = maybe
 
 U   DMR_FORM_ID
@@ -14,6 +17,10 @@ U   ENF_CONCLUSION_ID
 U   LIMIT_SET_ID
 X   EPA_ID
         all missing
+
+TABLES
+X   emissions (no data for any of our chems)
+X   emissions_sector
 
 
 other tables of interest:
