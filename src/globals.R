@@ -41,10 +41,10 @@ get_ef_tablechunk = function(table_name,
     # rows: 'x:y'; max of 100,000
 
     query_base = 'https://data.epa.gov/efservice/'
-    # query_base = 'http://iaspub.epa.gov/enviro/efservice/' #old? still in their example
+    # query_base = 'http://iaspub.epa.gov/enviro/efservice/' #old? still in one of their examples
 
     table_names_ext = ''
-    if(length(table_name) > 1) stop('table_name max length is 1 (maybe raise an issue with EPA about this?)')
+    if(length(table_name) > 1) stop('table_name max length is 1 (maybe raise an issue with EPA about this? should be allowed length 3)')
     # if(length(table_names) > 1){ #deprecated for now
     #     table_names_ext = paste0('/',
     #                              paste(table_names[2:length(table_names)],
@@ -54,7 +54,7 @@ get_ef_tablechunk = function(table_name,
 
     # query = 'https://data.epa.gov/efservice/ICIS_LIMIT/REF_POLLUTANT/SRS_ID/439216/rows/1:5/JSON'
     # query='https://data.epa.gov/efservice/ICIS_LIMIT/SRS_ID/=/5520/csv' ##***
-    query = glue('{qb}{tn}{cn}{op}{cv}{tnx}{ro}/json',
+    query = glue('{qb}{tn}{cn}{op}{cv}{tnx}{ro}/csv',
                  qb=query_base,
                  tn=paste(table_name, collapse='/'),
                  cn=ifelse(is.null(column_name), '', paste0('/', column_name)),
@@ -65,17 +65,16 @@ get_ef_tablechunk = function(table_name,
 
     r = httr::GET(query)
     d = httr::content(r, as='text', encoding='UTF-8')
-    d = jsonlite::fromJSON(d)
+    # d = jsonlite::fromJSON(d)
 
-    # read_csv(d)
-    HERE: see *** above for current test query. the issue is that json requests
-    can cause server-side errors with ICIS_LIMIT and ICIS_DMR_FORM_PARAMETER. csv
-    might be g2g, but the column names come back all mangled, so figure that out.
-    could also potentially just request default xml and convert that to csv here
+    d = read_csv(d, col_types = cols(.default = 'c')) %>%
+        select(-starts_with('...')) %>%
+        rename_with(function(x) str_match(x, '\\.([^\\.]+)$')[, 2])
 
-    if(inherits(d, 'list') && ! inherits(d, 'data.frame')){
-        d = as_tibble(d)
-    }
+    #needed if parsing json
+    # if(inherits(d, 'list') && ! inherits(d, 'data.frame')){
+    #     d = as_tibble(d)
+    # }
 
     return(d)
 }
@@ -241,15 +240,18 @@ query_envirofacts = function(table_names,
     # filter_value: if filtering, the value on the RHS of the filtering expression
     # join_column: the column by which to join tables in table_names. must be shared by all.
     # save_intermediates: logical. save each table's results to global env, in case something goes wrong?
+    #   DEPRECATED? (not yet): using arrow to manipulate files on disk, so saving intermediates to disk now required.
 
     #combines results from several envirofacts tables.
 
     combined_results = tibble()
     for(i in seq_along(table_names)){
 
-        print(paste('Working on', table_names[i]))
+        tname = table_names[i]
 
-        table_result = query_ef_table(table_names[i],
+        print(paste('Working on', tname))
+
+        table_result = query_ef_table(tname,
                                       column_name=filter_column,
                                       operator=filter_operator,
                                       column_value=filter_value,
@@ -258,12 +260,34 @@ query_envirofacts = function(table_names,
         if(inherits(table_result, 'ef_err')) return()
 
         if(save_intermediates){
-            print(paste('saving table', table_names[i], 'to global env'))
-            assign(table_names[i], table_result, pos=.GlobalEnv)
+            print(paste('saving table', tname, 'to global env'))
+            assign(tname, table_result, pos=.GlobalEnv)
         }
 
-        combined_results = full_join(combined_result, table_result,
-                                     by = toupper(join_column))
+        if(nrow(table_result)){
+
+            shared_cols = intersect(colnames(combined_result),
+                                    colnames(table_result))
+            shared_cols = shared_cols[shared_cols != join_column]
+
+            if(length(shared_cols)){
+                message(paste('dropping redundant columns from :',
+                              paste(shared_cols, collapse = ', ')))
+            }
+
+            table_result = select(table_result, -any_of(shared_cols))
+            combined_results = full_join(combined_result, table_result,
+                                         by = toupper(join_column))
+        } else {
+
+            if(! is.null(filter_column)){
+                warning(paste('no rows in', tname, 'for', filter_column,
+                              operator, filter_value))
+            } else {
+                warning(paste('no rows in', tname))
+            }
+        }
+
     }
 
     return(combined_results)
