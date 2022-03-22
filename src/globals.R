@@ -117,7 +117,7 @@ get_chunksets = function(nrows, maxrows){
     rem = nrows %% maxrows
     if(rem > 0) nchunks = nchunks + 1
 
-    chunk_starts = seq(1, nrows, maxrows)
+    chunk_starts = seq(0, nrows, maxrows)
     chunk_ends = 1:nchunks * maxrows
     if(rem != 0){
         chunk_ends[nchunks] = chunk_starts[nchunks] + rem - 1

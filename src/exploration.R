@@ -4,10 +4,12 @@ library(glue)
 library(feather)
 
 #TODO:
-# add parameter multi_index_action. can choose to drop all but the join index, join on all columns ending in "_ID",
-# join on all shared columns, interactively drop shared columns, etc.
+# [!] allow multiple column filtering operations in query_ef_table
+# [?] add parameter multi_index_action. can choose to drop all but the join index, join on all columns ending in "_ID",
+# [?] join on all shared columns, interactively drop shared columns, etc.
 
-# setwd('earthjustice/chem_risk_eval/')
+
+setwd('earthjustice/chem_risk_eval/')
 
 ## 0 - setup ####
 
@@ -32,8 +34,8 @@ cas = read_csv('data/general/target_substances.csv', col_types=cols())
 ## 2 - get everything we can out of envirofacts using REST service (ICIS-AIR centric) ####
 
 # icis_air_chem = tibble()
-for(i in 10:nrow(cas)){
-# for(i in seq_len(nrow(cas))){
+# for(i in 10:nrow(cas)){
+for(i in seq_len(nrow(cas))){
 
     srs_id = cas$SRS_id[i]
 
@@ -131,6 +133,29 @@ for(i in seq_len(nrow(cas))){
     # redundant_chem_cols_2 = c('MONITORING_LOCATION_DESC',
     #                           'PARAMETER_DESC', 'PERCENT_EXCEEDENCE_FLAG', 'PERCENT_REMOVAL_FLAG',
     #                           'POLLUTANT_CATEGORY_DESC')
+
+    chems = query_ef_table(table_name=c('TRI_CHEM_INFO'), column_name='SRS_ID', operator='=',
+                           column_value=as.character(srs_id), warn=TRUE)
+    if(nrow(chems) > 1) stop('hm? pick a row.')
+
+    facil = query_ef_table(table_name=c('TRI_FACILITY'), column_name=c('CITY_NAME'), operator='=',
+                           column_value=c('LOUISVILLE'), warn=TRUE)
+    facil = filter(facil,
+                   COUNTY_NAME == 'JEFFERSON',
+                   STATE_ABBR == 'KY')
+
+    rep_frms = query_ef_table(table_name=c('TRI_REPORTING_FORM'), column_name='TRI_CHEM_ID', operator='=',
+                              column_value=chems$TRI_CHEM_ID, warn=TRUE)
+
+    releases = query_ef_table(table_name=c('TRI_RELEASE_QTY'), column_name='DOC_CTRL_NUM', operator='=',
+                              column_value=chems$TRI_CHEM_ID, warn=TRUE)
+
+    chemd = full_join(rep_frms, facil, by = 'TRI_FACILITY_ID') %>%
+        full_join(chems, by = 'TRI_CHEM_ID')
+
+    intersect(colnames(rep_frms), colnames(facil))
+    intersect(colnames(rep_frms), colnames(chems))
+
 
     pollutants = query_ef_table(table_name=c('REF_POLLUTANT'), column_name='SRS_ID', operator='=', column_value=as.character(srs_id), warn=TRUE)
     if(nrow(pollutants)){
