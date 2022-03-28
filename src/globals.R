@@ -52,22 +52,47 @@ get_ef_tablechunk = function(table_name,
     #     table_names = table_names[1]
     # }
 
-    # query = 'https://data.epa.gov/efservice/ICIS_LIMIT/REF_POLLUTANT/SRS_ID/439216/rows/1:5/JSON'
-    # query='https://data.epa.gov/efservice/ICIS_LIMIT/SRS_ID/=/5520/csv' ##***
-    query = glue('{qb}{tn}{cn}{op}{cv}{tnx}{ro}/csv',
+    if(! is.null(column_name)){
+
+        cl = length(column_name)
+        if(length(operator) != cl && length(column_value) != cl){
+            stop('lengths of column_name, operator, and column_value must all be equal')
+        }
+
+        filter_str = ''
+        for(i in seq_len(cl)){
+            filter_str = paste(filter_str,
+                               paste(column_name[i], operator[i], column_value[i],
+                                     sep = '/'),
+                               sep = '/')
+        }
+    } else {
+        filter_str = NULL
+    }
+
+    query = glue('{qb}{tn}{fs}/count/json',
                  qb=query_base,
                  tn=paste(table_name, collapse='/'),
-                 cn=ifelse(is.null(column_name), '', paste0('/', column_name)),
-                 op=ifelse(is.null(operator), '', paste0('/', operator)),
-                 cv=ifelse(is.null(column_value), '', paste0('/', column_value)),
-                 tnx=table_names_ext,
-                 ro=ifelse(! is.null(rows), paste0('/rows/', rows), ''))
+                 fs = filter_str)
+
+    # query = 'https://data.epa.gov/efservice/ICIS_LIMIT/REF_POLLUTANT/SRS_ID/439216/rows/1:5/JSON'
+    # query='https://data.epa.gov/efservice/ICIS_LIMIT/SRS_ID/=/5520/csv' ##***
+    # query = glue('{qb}{tn}{cn}{op}{cv}{tnx}{ro}/csv',
+    query = glue('{qb}{tn}{fs}/csv',
+                 qb=query_base,
+                 tn=paste(table_name, collapse='/'),
+                 # cn=ifelse(is.null(column_name), '', paste0('/', column_name)),
+                 # op=ifelse(is.null(operator), '', paste0('/', operator)),
+                 # cv=ifelse(is.null(column_value), '', paste0('/', column_value)),
+                 # tnx=table_names_ext,
+                 # ro=ifelse(! is.null(rows), paste0('/rows/', rows), ''))
+                 fs = filter_str)
 
     r = httr::GET(query)
     d = httr::content(r, as='text', encoding='UTF-8')
     # d = jsonlite::fromJSON(d)
 
-    d = read_csv(d, col_types = cols(.default = 'c')) %>%
+    d = sw(sm(read_csv(d, col_types = cols(.default = 'c')))) %>%
         select(-starts_with('...')) %>%
         rename_with(function(x) str_match(x, '\\.([^\\.]+)$')[, 2])
 
@@ -143,12 +168,32 @@ query_ef_rows = function(table_name,
 
     if(length(table_name) > 1) stop('this function is for querying rows of a single table')
 
-    query = glue('{qb}{tn}{cn}{op}{cv}/count/json',
+    if(! is.null(column_name)){
+
+        cl = length(column_name)
+        if(length(operator) != cl && length(column_value) != cl){
+            stop('lengths of column_name, operator, and column_value must all be equal')
+        }
+
+        filter_str = ''
+        for(i in seq_len(cl)){
+            filter_str = paste(filter_str,
+                               paste(column_name[i], operator[i], column_value[i],
+                                     sep = '/'),
+                               sep = '/')
+        }
+    } else {
+        filter_str = NULL
+    }
+
+    # query = glue('{qb}{tn}{cn}{op}{cv}/count/json',
+    query = glue('{qb}{tn}{fs}/count/json',
                  qb=query_base,
                  tn=paste(table_name, collapse='/'),
-                 cn=ifelse(is.null(column_name), '', paste0('/', column_name)),
-                 op=ifelse(is.null(operator), '', paste0('/', operator)),
-                 cv=ifelse(is.null(column_value), '', paste0('/', column_value)))
+                 fs = filter_str)
+                 # cn=ifelse(is.null(column_name), '', paste0('/', column_name)),
+                 # op=ifelse(is.null(operator), '', paste0('/', operator)),
+                 # cv=ifelse(is.null(column_value), '', paste0('/', column_value)))
 
     r = httr::GET(query)
     d = httr::content(r, as='text', encoding='UTF-8')
@@ -161,12 +206,21 @@ query_ef_table = function(table_name,
                           column_name=NULL,
                           operator=NULL,
                           column_value=NULL,
-                          warn=TRUE){
+                          warn=TRUE,
+                          verbose=FALSE){
 
     # table_name: char string; the name of an envirofacts table
     # column_name: char: optional; use to filter by column value (see operator)
-    # operator: =, !=, <, >, BEGINNING, CONTAINING; if filtering, the filter expression's operator (with column_value)
-    # column_value: if filtering, the value on the RHS of the filtering expression
+    #   if filtering by multiple columns, include them all here as a character vector.
+    # operator: =, !=, <, >, BEGINNING, CONTAINING; if filtering, the filter
+    #   expression's operator (with column_value). If filtering on multiple columns,
+    #   must supply a separate operator for each column as a character vector.
+    #   Make sure elements of column_name, operator, and column_value line
+    #   up correctly.
+    # column_value: if filtering, the value on the RHS of the filtering expression.
+    #   If filtering on multiple columns, must supply a value for each column as
+    #   a vector. Make sure elements of column_name, operator, and column_value line
+    #   up correctly.
 
     nrows = query_ef_rows(table_name = table_name,
                           column_name = column_name,
@@ -185,11 +239,11 @@ query_ef_table = function(table_name,
             return(rtn_abrt)
         }
     } else {
-        print(paste('This table has', nrows, 'row(s).'))
+        if(verbose) print(paste('This table has', nrows, 'row(s).'))
     }
 
     if(nrows == 0){
-        message('Returning empty tibble')
+        if(verbose) message('Returning empty tibble')
         return(tibble())
     }
 
@@ -200,7 +254,7 @@ query_ef_table = function(table_name,
     task_start = proc.time()
     for(i in seq_along(chunksets)){
 
-        print(paste('Retrieving chunk', i, 'of', length(chunksets)))
+        if(verbose) print(paste('Retrieving chunk', i, 'of', length(chunksets)))
 
         chnk = get_ef_tablechunk(table_name=table_name,
                                  column_name=column_name,
@@ -212,7 +266,7 @@ query_ef_table = function(table_name,
     }
 
     task_time = unname(round((proc.time() - task_start)[3] / 60, 2))
-    print(paste0('Got table ', table_name, ' (', nrows, ' rows) in ', task_time, ' minutes'))
+    if(verbose) print(paste0('Got table ', table_name, ' (', nrows, ' rows) in ', task_time, ' minutes'))
 
     return(full_table)
 }
@@ -293,3 +347,40 @@ query_envirofacts = function(table_names,
     return(combined_results)
 }
 
+dms_to_decdeg = function(x){
+
+    #x: an integer or character vector of latlongs in dms format, e.g. "123456" or 1234567
+    #                                                                   DDMMSS     DDDMMSS
+
+    decdeg = c()
+    for(i in seq_along(x)){
+
+        xx = x[i]
+
+        if(! nchar(xx) %in% 6:7){
+            warning(paste(nchar(xx), 'characters in x. need 6 (or 7 for some longitudes)'))
+            decdeg[i] = NA
+        }
+
+        deginc = if(nchar(xx) == 7) 1 else 0
+
+        degs = as.numeric(substr(xx, 1, 2 + deginc))
+        mins = as.numeric(substr(xx, 3 + deginc, 4 + deginc))
+        secs = as.numeric(substr(xx, 5 + deginc, 6 + deginc))
+
+        decdeg[i] = degs + mins / 60 + secs / 3600
+    }
+
+    return(decdeg)
+}
+
+clean_county_names = function(x){
+
+    x = gsub('[\\. ]', '', x)
+    x = sub('parish$', '', x, ignore.case = TRUE)
+    x = sub('thebaptist$', '', x, ignore.case = TRUE)
+    x = sub('^saint', 'ST', x, ignore.case = TRUE)
+    x = toupper(x)
+
+    return(x)
+}
