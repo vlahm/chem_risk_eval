@@ -326,16 +326,14 @@ for(i in seq_len(nrow(cas))){
     casrn = cas$CASRN_nohyphens[i]
     print(paste('working on chem:', casrn))
 
-    for(j in seq_len(nrow(cities))){
-
-        city = cities[j, ]
+    for(stt in unique(cities$state)){
 
         for(yr in as.character(2007:year(Sys.Date()))){
 
             query_base = 'https://echodata.epa.gov/echo/dmr_rest_services.get_custom_data_annual'
             cas_spec = paste0('?output=CSV&p_cas=', casrn)
             query_mid = '&p_est=Y&p_loads_data=DMR&p_nd=ZERO&p_nutrient_agg=N&p_param_group=N'
-            state_spec = paste0('&p_st=', city$state)
+            state_spec = paste0('&p_st=', stt)
             year_spec = paste0('&p_year=', yr)
 
             query = paste0(query_base, cas_spec, query_mid, state_spec, year_spec)
@@ -345,14 +343,14 @@ for(i in seq_len(nrow(cas))){
                 d = httr::content(r, as='text', encoding='UTF-8')
                 d = read_csv(d, col_types = cols(.default = 'c'), skip = 2) %>%
                     mutate(County = clean_county_names(County)) %>%
-                    filter(County == clean_county_names(city$county))
+                    filter(County %in% clean_county_names(cities$county[cities$state == stt]))
             })
-
-            if(nrow(d)) bind_rows(dmrd, d)
 
             if(inherits(tryresp, 'try-error')){
                 dmr_fail = c(dmr_fail, paste(i, j, yr))
                 next
+            } else if(nrow(d)){
+                dmrd = bind_rows(dmrd, d)
             }
         }
     }
