@@ -32,13 +32,15 @@ get_ef_tablechunk = function(table_name,
                              column_name=NULL,
                              operator=NULL,
                              column_value=NULL,
-                             rows=NULL){
+                             rows=NULL,
+                             rtn_fmt){
 
     # table_name: char string; the name of an envirofacts table
     # column_name: char: optional; use to filter by column value (see operator)
     # operator: =, !=, <, >, BEGINNING, CONTAINING; if filtering, the filter expression's operator (with column_value)
     # column_value: if filtering, the value on the RHS of the filtering expression
     # rows: 'x:y'; max of 100,000
+    # see query_ef_table
 
     query_base = 'https://data.epa.gov/efservice/'
     # query_base = 'http://iaspub.epa.gov/enviro/efservice/' #old? still in one of their examples
@@ -67,34 +69,33 @@ get_ef_tablechunk = function(table_name,
                                sep = '/')
         }
     } else {
-        filter_str = NULL
+        filter_str = ''
     }
-
-    query = glue('{qb}{tn}{fs}/count/json',
-                 qb=query_base,
-                 tn=paste(table_name, collapse='/'),
-                 fs = filter_str)
 
     # query = 'https://data.epa.gov/efservice/ICIS_LIMIT/REF_POLLUTANT/SRS_ID/439216/rows/1:5/JSON'
     # query='https://data.epa.gov/efservice/ICIS_LIMIT/SRS_ID/=/5520/csv' ##***
     # query = glue('{qb}{tn}{cn}{op}{cv}{tnx}{ro}/csv',
-    query = glue('{qb}{tn}{fs}/csv',
+    query = glue('{qb}{tn}{fs}{ro}/{fmt}',
                  qb=query_base,
                  tn=paste(table_name, collapse='/'),
                  # cn=ifelse(is.null(column_name), '', paste0('/', column_name)),
                  # op=ifelse(is.null(operator), '', paste0('/', operator)),
                  # cv=ifelse(is.null(column_value), '', paste0('/', column_value)),
                  # tnx=table_names_ext,
-                 # ro=ifelse(! is.null(rows), paste0('/rows/', rows), ''))
-                 fs = filter_str)
+                 fs=filter_str,
+                 ro=ifelse(! is.null(rows), paste0('/rows/', rows), ''),
+                 fmt=rtn_fmt)
 
     r = httr::GET(query)
     d = httr::content(r, as='text', encoding='UTF-8')
-    # d = jsonlite::fromJSON(d)
 
-    d = sw(sm(read_csv(d, col_types = cols(.default = 'c')))) %>%
-        select(-starts_with('...')) %>%
-        rename_with(function(x) str_match(x, '\\.([^\\.]+)$')[, 2])
+    if(rtn_fmt == 'json'){
+        d = jsonlite::fromJSON(d)
+    } else {  #csv
+        d = sw(sm(read_csv(d, col_types = cols(.default = 'c')))) %>%
+            select(-starts_with('...')) %>%
+            rename_with(function(x) str_match(x, '\\.([^\\.]+)$')[, 2])
+    }
 
     #needed if parsing json
     # if(inherits(d, 'list') && ! inherits(d, 'data.frame')){
@@ -183,7 +184,7 @@ query_ef_rows = function(table_name,
                                sep = '/')
         }
     } else {
-        filter_str = NULL
+        filter_str = ''
     }
 
     # query = glue('{qb}{tn}{cn}{op}{cv}/count/json',
@@ -206,6 +207,7 @@ query_ef_table = function(table_name,
                           column_name=NULL,
                           operator=NULL,
                           column_value=NULL,
+                          rtn_fmt='csv',
                           warn=TRUE,
                           verbose=FALSE){
 
@@ -221,6 +223,16 @@ query_ef_table = function(table_name,
     #   If filtering on multiple columns, must supply a value for each column as
     #   a vector. Make sure elements of column_name, operator, and column_value line
     #   up correctly.
+    # rtn_fmt: character. The return format of the envirofacts API request.
+    #   Either "csv" or "json". Some envirofacts tables generate
+    #   errors when returning one format or the other. If you don't get what you're
+    #   expecting with "csv", try "json". The output of this function will be a
+    #   data.frame in either case. This parameter is just a way of fiddling with
+    #   an imperfect data retrieval system.
+
+    if(! rtn_fmt %in% c('csv', 'json')){
+        stop('rtn_fmt must be "csv" or "json"')
+    }
 
     nrows = query_ef_rows(table_name = table_name,
                           column_name = column_name,
@@ -260,7 +272,8 @@ query_ef_table = function(table_name,
                                  column_name=column_name,
                                  operator=operator,
                                  column_value=column_value,
-                                 rows=chunksets[i])
+                                 rows=chunksets[i],
+                                 rtn_fmt=rtn_fmt)
 
         full_table = bind_rows(full_table, chnk)
     }

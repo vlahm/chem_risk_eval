@@ -129,8 +129,7 @@ for(i in seq_len(nrow(cas))){
 
 ## 3 - TRI: envirofacts REST service ####
 
-# for(i in seq_len(nrow(cas))){
-for(i in 4:29){
+for(i in seq_len(nrow(cas))){
 
     srs_id = cas$SRS_id[i]
     print(paste('working on chem:', srs_id))
@@ -174,9 +173,13 @@ for(i in 4:29){
     uniq_facils = unique(facil$TRI_FACILITY_ID)
 
     #report forms
-    rep_frms = query_ef_table(table_name=c('TRI_REPORTING_FORM'), column_name='TRI_CHEM_ID', operator='=',
-                              column_value=chems$TRI_CHEM_ID, warn=TRUE)
+    rep_frms <- try({
+        query_ef_table(table_name=c('TRI_REPORTING_FORM'), column_name='TRI_CHEM_ID', operator='=',
+                       column_value=chems$TRI_CHEM_ID, warn=TRUE)
+    })
+    if(inherits(rep_frms, 'try-error')) next
     rep_frms = filter(rep_frms, TRI_FACILITY_ID %in% uniq_facils)
+    if(! nrow(rep_frms)) next
     docnums = unique(rep_frms$DOC_CTRL_NUM)
 
     #releases
@@ -254,9 +257,21 @@ for(i in 4:29){
 }
 
 
-## 4 - [ZERO DATA] NEI: envirofacts REST service ####
+## 4 - NEI: envirofacts REST service ####
 
-#no information on any of our target chemicals!
+# need to look up chemicals by name! "description"
+
+# all_nei = query_ef_table(table_name=c('POLLUTANT'), warn=TRUE, rtn_fmt='json')
+# write_csv(all_nei, '/tmp/nei_pollutants.csv')
+# for(i in seq_len(nrow(cas))){
+#
+#     srs_id = cas$SRS_id[i]
+#     print(paste('working on chem:', srs_id))
+#     pollutants = query_ef_table(table_name=c('REF_POLLUTANT'), column_name='SRS_ID',
+#                                 operator='=', column_value=as.character(srs_id), warn=FALSE)
+#     print(any(pollutants$POLLUTANT_CODE %in% all_nei$POLLUTANT_CODE))
+# }
+
 
 for(i in seq_len(nrow(cas))){
 
@@ -264,21 +279,23 @@ for(i in seq_len(nrow(cas))){
     print(paste('working on chem:', srs_id))
 
     #chemicals
+    # all_chem = query_ef_table(table_name=c('REF_POLLUTANT'), warn=TRUE, rtn_fmt='csv')
+
     pollutants = query_ef_table(table_name=c('REF_POLLUTANT'), column_name='SRS_ID',
                                 operator='=', column_value=as.character(srs_id), warn=FALSE)
 
     #use this to demonstrate lack of data
-#     for(k in seq_len(nrow(pollutants))){
-#         print(paste(k, 'of', nrow(pollutants), 'k'))
-#         # rr = query_ef_rows(table_name='FACILITY_SUMMARY',
-#         rr = query_ef_rows(table_name='POLLUTANT',
-#                       column_name=c('POLLUTANT_CODE'),
-#                       operator=c('='),
-#                       # column_value='108883')
-#                       column_value=pollutants$POLLUTANT_CODE[k])
-#         print(rr)
-#     }
-# }
+    for(k in seq_len(nrow(pollutants))){
+        print(paste(k, 'of', nrow(pollutants), 'k'))
+        # rr = query_ef_rows(table_name='FACILITY_SUMMARY',
+        rr = query_ef_rows(table_name='EMISSIONS',
+                      column_name=c('POLLUTANT_CODE'),
+                      operator=c('='),
+                      # column_value='108883')
+                      column_value=pollutants$POLLUTANT_CODE[k])
+        print(rr)
+    }
+}
 
     #facilities (ready to go, just nothing to work with here)
     facil_fails = c()
@@ -316,6 +333,10 @@ for(i in seq_len(nrow(cas))){
 }
 
 
+## 4b - NEI alternative endpoint? ####
+
+# https://echo.epa.gov/tools/web-services/air-pollutant-report#/Air%20Pollution%20Report
+
 ## 5 - [no ECHO service per se] ECHO: envirofacts REST service ####
 ## 6 - DMR: REST service ####
 
@@ -344,7 +365,7 @@ for(i in seq_len(nrow(cas))){
                 d = read_csv(d, col_types = cols(.default = 'c'), skip = 2) %>%
                     mutate(County = clean_county_names(County)) %>%
                     filter(County %in% clean_county_names(cities$county[cities$state == stt]))
-            })
+            }, silent = TRUE)
 
             if(inherits(tryresp, 'try-error')){
                 dmr_fail = c(dmr_fail, paste(i, stt, yr))
