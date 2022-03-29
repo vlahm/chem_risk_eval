@@ -320,9 +320,9 @@ for(i in seq_len(nrow(cas))){
 ## 6 - DMR: REST service ####
 
 dmr_fail = c()
-dmrd = tibble()
 for(i in seq_len(nrow(cas))){
 
+    dmrd = tibble()
     casrn = cas$CASRN_nohyphens[i]
     print(paste('working on chem:', casrn))
 
@@ -347,13 +347,15 @@ for(i in seq_len(nrow(cas))){
             })
 
             if(inherits(tryresp, 'try-error')){
-                dmr_fail = c(dmr_fail, paste(i, j, yr))
+                dmr_fail = c(dmr_fail, paste(i, stt, yr))
                 next
             } else if(nrow(d)){
                 dmrd = bind_rows(dmrd, d)
             }
         }
     }
+
+    write_csv(dmrd, paste0('data/dmr/', casrn, '.csv'))
 }
 
 
