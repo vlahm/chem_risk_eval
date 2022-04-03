@@ -397,3 +397,134 @@ clean_county_names = function(x){
 
     return(x)
 }
+
+ej_heatmap_kde = function(d, center, scale, bw=0.005, res=1000, addpoints=FALSE, fileout){
+
+    klonmin = min(d$lon) - .02
+    klonmax = max(d$lon) + .02
+    klatmin = min(d$lat) - .02
+    klatmax = max(d$lat) + .02
+
+    kde = bkde2D(as.matrix(d[, c('lon', 'lat')]),
+                 bandwidth = c(bw, bw),
+                 gridsize = c(res, res),
+                 # range.x = list(c(-94.25, -94), c(29.8, 30.1)))
+                 range.x = list(c(klonmin, klonmax), c(klatmin, klatmax)),
+                 truncate = FALSE)
+
+
+    # Create Raster from Kernel Density output
+    KernelDensityRaster = raster(list(x=kde$x1, y=kde$x2, z=kde$fhat))
+    # plot(KernelDensityRaster)
+
+    # #create pal function for coloring the raster
+    # palRaster <- colorNumeric("Spectral", domain = KernelDensityRaster@data@values)
+    #
+    # ## Leaflet map with raster
+    # leaflet() %>% addTiles() %>%
+    #     addRasterImage(KernelDensityRaster,
+    #                    colors = palRaster,
+    #                    opacity = .8) %>%
+    #     addLegend(pal = palRaster,
+    #               values = KernelDensityRaster@data@values,
+    #               title = "Kernel Density of Points")
+
+    #set low density cells as NA so we can make them transparent with the colorNumeric function
+    KernelDensityRaster@data@values[which(KernelDensityRaster@data@values < 1)] = NA
+
+    # #create pal function for coloring the raster
+    # palRaster = colorNumeric("Spectral",
+    #                          domain = KernelDensityRaster@data@values,
+    #                          na.color = "transparent")
+
+    palRaster = colorBin("Spectral",
+                         bins = 7,
+                         domain = KernelDensityRaster@data@values,
+                         na.color = "transparent")
+
+    ## Redraw the map
+    mapout = leaflet() %>%
+        # addTiles() %>%
+        addProviderTiles(providers$CartoDB.Positron) %>%
+        setView(lng = center[1],
+                lat = center[2],
+                zoom = scale) %>%
+        addRasterImage(KernelDensityRaster,
+                       colors = palRaster,
+                       opacity = .8) %>%
+        addLegend(pal = palRaster,
+                  values = KernelDensityRaster@data@values,
+                  title = "Kernel Density of Points")
+
+    if(addpoints){
+
+        mapout = mapout %>%
+            addCircles(lng = d$lon, lat = d$lat,
+                       radius = .5, opacity = .2, col = "blue")
+    }
+
+    mapshot(mapout, file = fileout)
+}
+
+ej_heatmap = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE, fileout){
+
+    r = rast(resolution=res, xmin = lonrange[1], xmax = lonrange[2],
+             ymin = latrange[1], ymax = latrange[2], crs='EPSG:4326')
+
+    dvect = vect(d, geom=c('lon', 'lat'), crs = 'EPSG:4326')
+    drast = rasterize(dvect, r, field='load_kg', fun=sum)
+
+    # palRaster = colorBin('Spectral',
+                         # bins = 7,
+                         # reverse = TRUE,
+    # palRaster = colorNumeric('Spectral',
+    # palRaster = colorNumeric('magma',
+    # palRaster = colorNumeric(magma(n=50, begin = 0.2, end = 0.9),
+    # palRaster = colorNumeric(magma(n=50, begin = 0.2, end = 0.9),
+    palRaster = colorNumeric(colorRampPalette(c('blue', 'red'))(50),
+                             domain = values(drast),
+                             na.color = 'transparent',
+                             reverse = FALSE)
+
+#     tag.map.title <- tags$style(HTML("
+#   .leaflet-control.map-title {
+#     transform: translate(-50%,20%);
+#     position: fixed !important;
+#     left: 50%;
+#     text-align: center;
+#     padding-left: 10px;
+#     padding-right: 10px;
+#     background: rgba(255,255,255,0.75);
+#     font-weight: bold;
+#     font-size: 28px;
+#   }
+# "))
+#
+#     title <- tags$div(
+#         tag.map.title, HTML("Map title")
+#     )
+
+    mapout = leaflet() %>%
+        addProviderTiles(providers$CartoDB.Positron) %>%
+        setView(lng = center[1],
+                lat = center[2],
+                zoom = scale) %>%
+        addRasterImage(raster(drast),
+                       colors = palRaster,
+                       opacity = .6) %>%
+        addLegend(pal = palRaster,
+                  values = values(drast),
+                  title = 'Cumulative Load (kg)')
+        # addControl(title, position = "topleft", className="map-title")
+
+    if(addpoints){
+
+        mapout = mapout %>%
+            # addCircles(lng = d$lon, lat = d$lat, opacity = .5, weight = 3,
+            #            radius = 1, col = 'black', fill = FALSE)
+            addCircleMarkers(lng = d$lon, lat = d$lat, opacity = 1, weight=1,
+                             radius = 1, col = 'black', fill = FALSE)
+    }
+
+    mapshot(mapout, file = fileout)
+}
