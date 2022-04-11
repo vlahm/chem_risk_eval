@@ -37,7 +37,7 @@ cas = read_csv('data/general/target_substances.csv', col_types=cols())
 
 cities = read_csv('data/general/cities.csv', col_types=cols())
 
-## 2 - [ABANDONED] get everything we can out of envirofacts using REST service (ICIS-AIR centric) ####
+## 2 - [ABANDONED] ICIS-AIR: envirofacts REST service ####
 
 # icis_air_chem = tibble()
 # for(i in 10:nrow(cas)){
@@ -147,8 +147,9 @@ for(i in seq_len(nrow(cas))){
         facil_ = tibble()
         city = cities[j, ]
         cnty_srch = is.na(city$city)
-        colq = if(cnty_srch) 'COUNTY_NAME' else 'CITY_NAME'
-        colv = if(cnty_srch) city$county else city$city
+        # colq = if(cnty_srch) 'COUNTY_NAME' else 'CITY_NAME'
+        colq = if(cnty_srch) 'STATE_ABBR' else 'CITY_NAME'
+        colv = if(cnty_srch) city$state else city$city
 
         tryres = try({
             facil_ = query_ef_table(table_name=c('TRI_FACILITY'), column_name=colq,
@@ -158,7 +159,10 @@ for(i in seq_len(nrow(cas))){
                 if(! cnty_srch){
                     facil_ = filter(facil_, COUNTY_NAME == city$county & STATE_ABBR == city$state)
                 } else {
-                    facil_ = filter(facil_, STATE_ABBR == city$state)
+                    # facil_ = filter(facil_, STATE_ABBR == city$state)
+                    facil_ = facil_ %>%
+                        mutate(COUNTY_NAME = clean_county_names(COUNTY_NAME)) %>%
+                        filter(COUNTY_NAME %in% clean_county_names(cities$county[cities$state == colv]))
                 }
             }
 
@@ -257,88 +261,80 @@ for(i in seq_len(nrow(cas))){
 }
 
 
-## 4 - NEI: envirofacts REST service ####
+## 4 - [NEEDS WORK] NEI: envirofacts REST service ####
 
-# need to look up chemicals by name! "description"
+#this is almost ready. just need to find out why so many requests toward the end of
+#   FACILITIES fail. might require honing in on the rows that are producing those
+#   errors.
 
-# all_nei = query_ef_table(table_name=c('POLLUTANT'), warn=TRUE, rtn_fmt='json')
-# write_csv(all_nei, '/tmp/nei_pollutants.csv')
-# for(i in seq_len(nrow(cas))){
-#
-#     srs_id = cas$SRS_id[i]
-#     print(paste('working on chem:', srs_id))
-#     pollutants = query_ef_table(table_name=c('REF_POLLUTANT'), column_name='SRS_ID',
-#                                 operator='=', column_value=as.character(srs_id), warn=FALSE)
-#     print(any(pollutants$POLLUTANT_CODE %in% all_nei$POLLUTANT_CODE))
-# }
-
-
+facil_fails = c()
+facil = tibble()
 for(i in seq_len(nrow(cas))){
 
-    srs_id = cas$SRS_id[i]
-    print(paste('working on chem:', srs_id))
+    cas_ = cas$CASRN_nohyphens[i]
+    print(paste('working on CAS:', cas_))
 
-    #chemicals
-    # all_chem = query_ef_table(table_name=c('REF_POLLUTANT'), warn=TRUE, rtn_fmt='csv')
+    #query facility summary table
+    for(stt in unique(cities$state)){
 
-    pollutants = query_ef_table(table_name=c('REF_POLLUTANT'), column_name='SRS_ID',
-                                operator='=', column_value=as.character(srs_id), warn=FALSE)
+        facil_ = tibble()
 
-    #use this to demonstrate lack of data
-    for(k in seq_len(nrow(pollutants))){
-        print(paste(k, 'of', nrow(pollutants), 'k'))
-        # rr = query_ef_rows(table_name='FACILITY_SUMMARY',
-        rr = query_ef_rows(table_name='EMISSIONS',
-                      column_name=c('POLLUTANT_CODE'),
-                      operator=c('='),
-                      # column_value='108883')
-                      column_value=pollutants$POLLUTANT_CODE[k])
-        print(rr)
-    }
-}
+        tryres = try({
+            facil_ = query_ef_table(table_name='FACILITY_SUMMARY',
+                                    column_name=c('STATE', 'POLLUTANT_CODE'),
+                                    operator=c('=', '='),
+                                    column_value=c(stt, cas_),
+                                    warn=FALSE)
 
-    #facilities (ready to go, just nothing to work with here)
-    facil_fails = c()
-    facil = tibble()
-    for(j in seq_len(nrow(cities))){
+            if(nrow(facil_)){
+                print(paste('got', nrow(facil_), 'rows for', stt, cas_))
 
-        city = cities[j, ]
-
-        for(k in seq_len(nrow(pollutants))){
-
-            facil_ = tibble()
-
-            tryres = try({
-                facil_ = query_ef_table(table_name='FACILITY_SUMMARY',
-                                        column_name=c('STATE', 'COUNTY', 'POLLUTANT_CODE'),
-                                        operator=c('=', '=', '='),
-                                        column_value=c(city$state,
-                                                       str_to_sentence(city$county),
-                                                       pollutants$POLLUTANT_CODE[k]),
-                                        warn=FALSE)
-
-                if(nrow(facil_)){
-                    print(paste('got', nrow(facil_), 'rows for', city$county, pollutants$CHEMICAL_ABSTRACT_SERVICE_NMBR[k]))
-                    facil_ = filter(facil_, STATE == city$state)
-                    facil = bind_rows(facil, facil_)
-                }
-            })
-
-            if(inherits(tryres, 'try-error')){
-                facil_fails = c(facil_fails, j)
-                next
+                facil = facil_ %>%
+                    mutate(COUNTY = clean_county_names(COUNTY)) %>%
+                    filter(COUNTY %in% clean_county_names(cities$county[cities$state == stt])) %>%
+                    bind_rows(facil)
             }
+        })
+
+        if(inherits(tryres, 'try-error')){
+            facil_fails = c(facil_fails, paste(i, stt))
+            next
         }
     }
 }
 
+# write_csv(facil, 'data/nei/facility_summary.csv')
+facil =  read_csv('data/nei/facility_summary.csv', col_types = cols(.default = 'c'))
 
-## 4b - NEI alternative endpoint? ####
+#supplement with facility lat/longs
 
-# https://echo.epa.gov/tools/web-services/air-pollutant-report#/Air%20Pollution%20Report
+fac_rows = query_ef_rows(table_name='FACILITIES')
+fac_chunks = get_chunksets(nrows=fac_rows, maxrows=1e4)
+fac_chunks = c(fac_chunks[1:3], '30000:31500', '31501:31600', '31601:39999',
+               fac_chunks[5:6], '60000:61500', '61501:61600', '61601:69999',
+               fac_chunks[8:10])
+# fac_chunks = c(fac_chunks[1:6], '30000:31500', '31501:31600', '31601:39999', fac_chunks[9:20])
+# fac_chunks=c('60000:61500', '61501:61600', '61601:69999')
+locations = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE,
+                           custom_chunks=fac_chunks[1:7], timeout_=10,
+                           debug_=F, timeout_action='skip')
+locations1 = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE,
+                           custom_chunks=fac_chunks[8:15], timeout_=10,
+                           debug_=F, timeout_action='skip')
+locations = bind_rows(locations, locations1)
+# locations = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE, chunk_size=1e4)
+release_pts = query_ef_table(table_name='RELEASE_POINTS', warn=TRUE, verbose=TRUE)
 
-## 5 - [no ECHO service per se] ECHO: envirofacts REST service ####
-## 6 - DMR: REST service ####
+# write_csv(release_pts, 'data/nei/release_points.csv')
+# release_pts = read_csv('data/nei/release_points.csv', col_types = cols(.default = 'c'))
+
+nei = locations %>%
+    select(EIS_FACILITY_ID, FACILITY_ID, LATITUDE, LONGITUDE) %>%
+    right_join(facil, by = 'EIS_FACILITY_ID')
+
+write_csv('')
+
+## 5 - DMR: REST service ####
 
 dmr_fail = c()
 for(i in seq_len(nrow(cas))){
@@ -380,15 +376,62 @@ for(i in seq_len(nrow(cas))){
 }
 
 
+## 6 - ECHO (NPDES): data download ####
+
+#SOURCE: https://echo.epa.gov/tools/data-downloads/icis-npdes-data-set
+#   click on texas, kentucky, and louisiana. unzip resulting downloads. put them in ./data/echo
+#DEFINITIONS: https://echo.epa.gov/tools/data-downloads/icis-npdes-download-summary
+
+#need to run section 5 before this will work
+
+#need this for mapping DMR parameter codes to CAS numbers
+d = map_dfr(list.files('data/dmr', full.names = TRUE),
+            read_csv, col_types = cols(.default = 'c'))
+
+permit_facility_mapping = distinct(d, `NPDES Permit Number`, FRS_ID=`FRS ID`,
+                                   `Facility Latitude`, `Facility Longitude`)
+
+dmr_chem_codes = unique(d$`Parameter Code`)
+
+#does not connect violations data to facilities
+# lims = read_csv('data/echo/NPDES_LIMITS.csv',
+#                 col_types = cols(.default = 'c'))
+
+# echo_facil = read_csv('data/echo/facility_data/FRS_FACILITIES.csv',
+#                       col_types = cols(.default = 'c'))
+# echo_facil = read_csv('data/echo/facility_data/FRS_NAICS_CODES.csv',
+#                       col_types = cols(.default = 'c'))
+# echo_facil = read_csv('data/echo/facility_data/FRS_PROGRAM_LINKS.csv',
+#                       col_types = cols(.default = 'c'))
+# echo_facil = read_csv('data/echo/facility_data/FRS_SIC_CODES.csv',
+#                       col_types = cols(.default = 'c'))
+
+#national data for facilities (no chem)
+# echo = read_csv('data/echo/ECHO_EXPORTER.csv',
+#                 col_types = cols(.default = 'c'))
+
+echo = map_dfr(c('data/echo/LA_NPDES_EFF_VIOLATIONS.csv',
+                 'data/echo/TX_NPDES_EFF_VIOLATIONS.csv',
+                 'data/echo/KY_NPDES_EFF_VIOLATIONS.csv'),
+               read_csv, col_types = cols(.default = 'c'))
+
+echo = echo %>%
+    filter(! is.na(DMR_VALUE_STANDARD_UNITS),
+           PARAMETER_CODE %in% dmr_chem_codes) %>%
+    left_join(permit_facility_mapping,
+              by = c(NPDES_ID = 'NPDES Permit Number'))
+
+write_csv(echo, 'data/npdes_illegal_releases.csv')
+
 ## x - other things to attempt? ####
+
+#combined air emissions here: https://echo.epa.gov/tools/data-downloads#downloads
 
 #compile data from ECHO? (or already covered by the above?
 
-#compile location info and bind to event/chem info
-
 #compile more event details using LIMIT_ID, DMR_EVENT_ID, DMR_FORM_ID
 
-## 3 - EPA's TRI-DRM comparison portal ####
+## y - EPA's TRI-DRM comparison portal ####
 #(water pollutant loading tool custom search)
 #https://echo.epa.gov/trends/loading-tool/get-data/custom-search/
 

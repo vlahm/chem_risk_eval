@@ -33,7 +33,10 @@ get_ef_tablechunk = function(table_name,
                              operator=NULL,
                              column_value=NULL,
                              rows=NULL,
-                             rtn_fmt){
+                             rtn_fmt,
+                             timeout_,
+                             timeout_action,
+                             debug_){
 
     # table_name: char string; the name of an envirofacts table
     # column_name: char: optional; use to filter by column value (see operator)
@@ -86,23 +89,54 @@ get_ef_tablechunk = function(table_name,
                  ro=ifelse(! is.null(rows), paste0('/rows/', rows), ''),
                  fmt=rtn_fmt)
 
-    r = httr::GET(query)
-    d = httr::content(r, as='text', encoding='UTF-8')
+    if(debug_) browser()
 
-    if(rtn_fmt == 'json'){
-        d = jsonlite::fromJSON(d)
-    } else {  #csv
-        d = sw(sm(read_csv(d, col_types = cols(.default = 'c')))) %>%
+    # query = 'https://data.epa.gov/efservice/FACILITIES/rows/40000:49999/csv'
+    # query = 'https://data.epa.gov/efservice/FACILITIES/rows/50000:59999/csv'
+    # query = 'https://data.epa.gov/efservice/FACILITIES/rows/18000:18010/csv'
+    r = try(httr::GET(query, timeout(timeout_)),
+            silent = TRUE)
+    if(inherits(r, 'try-error')){
+        if(timeout_action == 'skip' && grepl('Timeout was reached', r[[1]])){
+            message('timout reached. skipping this chunk. see timeout_ parameter.')
+            return(tibble())
+        }
+        stop('timout reached. try increasing the value passed to the timeout_ parameter')
+    }
+    d = httr::content(r, as='text', encoding='UTF-8')
+    # sw(sm(read_csv(d, col_types = cols(.default = 'c')))) %>%
+    #     select(-starts_with('...')) %>%
+    #     rename_with(function(x) str_match(x, '\\.([^\\.]+)$')[, 2])
+
+    #sometimes SQL returns a server-side error when csv or json is requested.
+    #so, trying csv first, and json if that fails.
+
+    if(rtn_fmt == 'csv'){
+        dout <- try({
+            sw(sm(read_csv(d, col_types = cols(.default = 'c')))) %>%
             select(-starts_with('...')) %>%
             rename_with(function(x) str_match(x, '\\.([^\\.]+)$')[, 2])
+        }, silent = TRUE)
     }
 
-    #needed if parsing json
-    # if(inherits(d, 'list') && ! inherits(d, 'data.frame')){
-    #     d = as_tibble(d)
-    # }
+    if(rtn_fmt == 'json' || inherits(dout, 'try-error')){
 
-    return(d)
+        query = sub('csv$', 'json', query)
+        r = try(httr::GET(query, timeout(timeout_)),
+                silent = TRUE)
+        if(inherits(r, 'try-error')){
+            if(timeout_action == 'skip' && grepl('Timeout was reached', r[[1]])){
+                message('timout reached. skipping this chunk. see timeout_ parameter.')
+                return(tibble())
+            }
+            stop('timout reached. try increasing the value passed to the timeout_ parameter')
+        }
+        d = httr::content(r, as='text', encoding='UTF-8')
+        dout = as_tibble(jsonlite::fromJSON(d)) %>%
+            mutate(across(where(~! is.character(.)), as.character))
+    }
+
+    return(dout)
 }
 
 get_response_1char = function(msg,
@@ -134,23 +168,29 @@ get_response_1char = function(msg,
     }
 }
 
+# nrows=1; maxrows=1e5
+# nrows=259000; maxrows=1e4
 get_chunksets = function(nrows, maxrows){
 
     # nrows: the number of rows in an envirofacts table. probably queried via query_ef_rows()
     # maxrows: the maximum number of rows that can be returned via the envirofacts REST-API
+
+    options(scipen = 100)
 
     nchunks = nrows %/% maxrows
     rem = nrows %% maxrows
     if(rem > 0) nchunks = nchunks + 1
 
     chunk_starts = seq(0, nrows, maxrows)
-    chunk_ends = 1:nchunks * maxrows
+    chunk_ends = 1:nchunks * maxrows - 1
     if(rem != 0){
-        chunk_ends[nchunks] = chunk_starts[nchunks] + rem - 1
+        chunk_ends[nchunks] = chunk_starts[nchunks] + rem
     }
 
     chunk_sets = paste(chunk_starts, chunk_ends,
                        sep=':')
+
+    options(scipen = 0)
 
     return(chunk_sets)
 }
@@ -207,9 +247,15 @@ query_ef_table = function(table_name,
                           column_name=NULL,
                           operator=NULL,
                           column_value=NULL,
+                          specify_rows=TRUE,
+                          chunk_size=1e5,
+                          custom_chunks=NULL,
                           rtn_fmt='csv',
+                          timeout_=30,
+                          timeout_action='fail',
                           warn=TRUE,
-                          verbose=FALSE){
+                          verbose=FALSE,
+                          debug_=FALSE){
 
     # table_name: char string; the name of an envirofacts table
     # column_name: char: optional; use to filter by column value (see operator)
@@ -223,15 +269,49 @@ query_ef_table = function(table_name,
     #   If filtering on multiple columns, must supply a value for each column as
     #   a vector. Make sure elements of column_name, operator, and column_value line
     #   up correctly.
-    # rtn_fmt: character. The return format of the envirofacts API request.
-    #   Either "csv" or "json". Some envirofacts tables generate
-    #   errors when returning one format or the other. If you don't get what you're
-    #   expecting with "csv", try "json". The output of this function will be a
-    #   data.frame in either case. This parameter is just a way of fiddling with
+    # specify_rows: logical. if TRUE, the API request will include "/rows/x:y".
+    #   There's no reason to change the default unless you experience hanging requests
+    #   or unexplainable request failures. Something might be misspecified server-
+    #   side, and this could help. Note though that a request can't be larger
+    #   than 100,000 rows. If your query would return more than this,
+    #   specify_rows must be TRUE.
+    # chunk_size: the maximum number of rows to ask for at a time. Envirofacts
+    #   won't let you ask for more than 100,000 (the default).
+    # custom_chunks: if all else fails, you can figure out exactly which chunks are
+    #   causing trouble and tell get_ef_tablechunk exactly how to split
+    #   up its requests. Amazingly, there are some chunks that can't be
+    #   retrieved whole, but can be retrieved as two separate requests, notably
+    #   https://data.epa.gov/efservice/FACILITIES/rows/31500:31600/csv will fail,
+    #   but 31500:31550 and 31550:31600 will both work. or, 31500:31600/json will
+    #   work. if specified, this argument overrides chunk_size.
+    # rtn_fmt: character. semi-deprecated. This function will now try to return
+    #   CSV results first, and if that fails, it'll try again with JSON results.
+    #   You may also specify "json" to try that first, but then it won't fall back to CSV.
+    #   see details
+    # timeout_: integer. the amount of time to wait for a response from the server.
+    # timeout_action: character. either "skip" to move on to the next chunk,
+    #   or "fail" to raise an error.
+    # warn: logical. if TRUE and more than 1 million rows are queried, this function will
+    #   ask for confirmation before proceeding.
+    # verbose: logical. if TRUE, you'll receive more information.
+    # debug_: logical; only for interactive use. If TRUE, the debugger will be
+    #   entered before the first request is executed.
+
+    #DETAILS
+    #Some envirofacts tables generate errors when returning one format or the
+    #   other (JSON or CSV). The output of this function will be a
+    #   data.frame (tibble) in either case. This parameter is just a way of fiddling with
     #   an imperfect data retrieval system.
+
+    #RETURN VALUE
+    #an all-character tibble of evirofacts results
 
     if(! rtn_fmt %in% c('csv', 'json')){
         stop('rtn_fmt must be "csv" or "json"')
+    }
+
+    if(! timeout_action %in% c('skip', 'fail')){
+        stop('timeout_action must be "skip" or "fail"')
     }
 
     nrows = query_ef_rows(table_name = table_name,
@@ -259,23 +339,44 @@ query_ef_table = function(table_name,
         return(tibble())
     }
 
-    chunksets = get_chunksets(nrows=nrows,
-                              maxrows=1e5)
+    if(is.null(custom_chunks)){
+        chunksets = get_chunksets(nrows=nrows,
+                                  maxrows=chunk_size)
+    } else {
+        chunksets <- custom_chunks
+    }
 
     full_table = tibble()
     task_start = proc.time()
-    for(i in seq_along(chunksets)){
+    if(specify_rows){
+        for(i in seq_along(chunksets)){
 
-        if(verbose) print(paste('Retrieving chunk', i, 'of', length(chunksets)))
+            if(verbose) print(paste0('Retrieving chunk ', i, ' of ', length(chunksets),
+                                    '; (', chunksets[i], ')'))
 
-        chnk = get_ef_tablechunk(table_name=table_name,
-                                 column_name=column_name,
-                                 operator=operator,
-                                 column_value=column_value,
-                                 rows=chunksets[i],
-                                 rtn_fmt=rtn_fmt)
+            chnk = get_ef_tablechunk(table_name=table_name,
+                                     column_name=column_name,
+                                     operator=operator,
+                                     column_value=column_value,
+                                     rows=chunksets[i],
+                                     rtn_fmt=rtn_fmt,
+                                     timeout_=timeout_,
+                                     timeout_action=timeout_action,
+                                     debug_=debug_)
 
-        full_table = bind_rows(full_table, chnk)
+            full_table = bind_rows(full_table, chnk)
+        }
+    } else {
+        if(nrows >= 1e5) stop('envirofacts does not allow queries of more than 100,000 rows.')
+
+        if(verbose) print(paste('attempting to retrieve all rows (specify_rows is FALSE).'))
+
+        full_table = get_ef_tablechunk(table_name=table_name,
+                                       column_name=column_name,
+                                       operator=operator,
+                                       column_value=column_value,
+                                       rows=NULL,
+                                       rtn_fmt=rtn_fmt)
     }
 
     task_time = unname(round((proc.time() - task_start)[3] / 60, 2))
@@ -389,11 +490,11 @@ dms_to_decdeg = function(x){
 
 clean_county_names = function(x){
 
-    x = gsub('[\\. ]', '', x)
-    x = sub('parish$', '', x, ignore.case = TRUE)
-    x = sub('thebaptist$', '', x, ignore.case = TRUE)
-    x = sub('^saint', 'ST', x, ignore.case = TRUE)
     x = toupper(x)
+    x = gsub('[\\. \\-]', '', x)
+    x = sub('PARISH$', '', x)
+    x = sub('THEBAPTIST$', '', x)
+    x = sub('^SAINT', 'ST', x)
 
     return(x)
 }
