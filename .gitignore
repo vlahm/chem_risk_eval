@@ -1,4 +1,5 @@
-data
+data/*
+!data/general
 hours.csv
 *Rproj*
 .Rproj.user
