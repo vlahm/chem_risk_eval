@@ -130,7 +130,6 @@ for(i in seq_len(nrow(cas))){
 ## 3 - TRI: envirofacts REST service ####
 
 for(i in seq_len(nrow(cas))){
-for(i in 5:nrow(cas)){
 
     srs_id = cas$SRS_id[i]
     print(paste0(Sys.time(), ' working on chem: ', srs_id, ' (', i, ' of ', nrow(cas), ')'))
@@ -140,6 +139,17 @@ for(i in 5:nrow(cas)){
     chems = query_ef_table(table_name=c('TRI_CHEM_INFO'), column_name='SRS_ID', operator='=',
                            column_value=as.character(srs_id), warn=TRUE)
     if(nrow(chems) > 1) stop('hm? pick a row.')
+
+    #report forms
+    print(paste(Sys.time(), 'getting report data'))
+    rep_frms <- try({
+        query_ef_table(table_name=c('TRI_REPORTING_FORM'), column_name='TRI_CHEM_ID', operator='=',
+                       column_value=chems$TRI_CHEM_ID, warn=TRUE)
+    })
+    if(inherits(rep_frms, 'try-error')){
+        print('no forms available')
+        next
+    }
 
     #facilities
     print(paste(Sys.time(), 'getting facility data'))
@@ -181,13 +191,7 @@ for(i in 5:nrow(cas)){
     }
     uniq_facils = unique(facil$TRI_FACILITY_ID)
 
-    #report forms
-    print(paste(Sys.time(), 'getting report data'))
-    rep_frms <- try({
-        query_ef_table(table_name=c('TRI_REPORTING_FORM'), column_name='TRI_CHEM_ID', operator='=',
-                       column_value=chems$TRI_CHEM_ID, warn=TRUE, verbose=TRUE)
-    })
-    if(inherits(rep_frms, 'try-error')) next
+    #filter forms by facility
     rep_frms = filter(rep_frms, TRI_FACILITY_ID %in% uniq_facils)
     if(! nrow(rep_frms)) next
     docnums = unique(rep_frms$DOC_CTRL_NUM)
@@ -196,12 +200,16 @@ for(i in 5:nrow(cas)){
     print(paste(Sys.time(), 'getting release data'))
     release_fails = c()
     releases = tibble()
-    for(docnum in docnums){
+    for(i in seq_along(docnums)){
+
+        if(i %% 25 == 0) print(paste('got', i, 'of', length(docnums), 'sets'))
+        docnum = docnums[i]
+
         releases_ = tibble()
         tryres = try({
             releases_ = query_ef_table(table_name=c('TRI_RELEASE_QTY'),
                                        column_name='DOC_CTRL_NUM', operator='=',
-                                       column_value=docnum, warn=TRUE, verbose=TRUE)
+                                       column_value=docnum, warn=TRUE)
             releases = bind_rows(releases, releases_)
         })
 
@@ -211,36 +219,34 @@ for(i in 5:nrow(cas)){
         }
     }
 
-    #environments
-    print(paste(Sys.time(), 'getting environment data'))
-    water_fails = c()
-    water = tibble()
-    for(docnum in docnums){
-        water_ = tibble()
-        tryres = try({
-            water_ = query_ef_table(table_name=c('TRI_WATER_STREAM'),
-                                      column_name='DOC_CTRL_NUM', operator='=',
-                                      column_value=docnum, warn=TRUE, verbose=TRUE)
-            water = bind_rows(water, water_)
-        })
-
-        if(inherits(tryres, 'try-error')){
-            water_fails = c(water_fails, docnum)
-            next
-        }
-    }
-
-    # system('spd-say done')
-    # dd = releases[duplicated(releases$DOC_CTRL_NUM), ]
-    # dd[duplicated(dd$DOC_CTRL_NUM), ]
-    # intersect(colnames(rep_frms), colnames(facil))
-    # intersect(colnames(rep_frms), colnames(chems))
+    # #environments
+    # print(paste(Sys.time(), 'getting environment data'))
+    # water_fails = c()
+    # water = tibble()
+    # for(i in seq_along(docnums)){
+    #
+    #     if(i %% 25 == 0) print(paste('got', i, 'of', length(docnums), 'sets'))
+    #     docnum = docnums[i]
+    #
+    #     water_ = tibble()
+    #     tryres = try({
+    #         water_ = query_ef_table(table_name=c('TRI_WATER_STREAM'),
+    #                                   column_name='DOC_CTRL_NUM', operator='=',
+    #                                   column_value=docnum, warn=TRUE)
+    #         water = bind_rows(water, water_)
+    #     })
+    #
+    #     if(inherits(tryres, 'try-error')){
+    #         water_fails = c(water_fails, docnum)
+    #         next
+    #     }
+    # }
 
     #write data
     chemd = full_join(rep_frms, facil, by = 'TRI_FACILITY_ID') %>%
         full_join(chems, by = 'TRI_CHEM_ID') %>%
-        full_join(releases, by = 'DOC_CTRL_NUM') %>%
-        full_join(water, by = 'DOC_CTRL_NUM')
+        full_join(releases, by = 'DOC_CTRL_NUM')
+        # full_join(water, by = 'DOC_CTRL_NUM')
 
     write_csv(chemd, paste0('data/tri/raw/', cas$CASRN[i], '.csv'))
 

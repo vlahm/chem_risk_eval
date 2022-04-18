@@ -471,6 +471,11 @@ dms_to_decdeg = function(x){
 
         xx = x[i]
 
+        if(is.na(xx)){
+            decdeg[i] = NA
+            next
+        }
+
         if(! nchar(xx) %in% 6:7){
             warning(paste(nchar(xx), 'characters in x. need 6 (or 7 for some longitudes)'))
             decdeg[i] = NA
