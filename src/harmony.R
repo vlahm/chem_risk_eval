@@ -1,18 +1,15 @@
-library(terra)
-library(raster)
 library(tidyverse)
 library(glue)
 library(lubridate)
-# library(KernSmooth)
-library(leaflet)
-library(mapview)
-library(viridis)
-library(magick)
-# library(htmlwidgets)
-# library(htmltools)
 
 sw = suppressWarnings
 sm = suppressMessages
+
+#TODO: convert inputs to command line args?
+
+# inputs ####
+
+earliest_year = 2010
 
 # setup ####
 
@@ -22,25 +19,34 @@ cas = read_csv('data/general/target_substances.csv', col_types=cols())
 
 cities = read_csv('data/general/cities.csv', col_types=cols())
 
-houston_counties = cities %>%
-    filter(! is.na(city) & city == 'HOUSTON') %>%
-    pull(county)
+# houston_counties = cities %>%
+#     filter(! is.na(city) & city == 'HOUSTON') %>%
+#     pull(county)
+
+county_centroids = cities %>%
+    select(state, county, cty_lat = lat, cty_lon = lon) %>%
+    mutate(county = clean_county_names(county))
 
 # harmonize DMR data ####
 
-d = map_dfr(list.files('data/dmr', full.names = TRUE),
+dmr = map_dfr(list.files('data/dmr', full.names = TRUE),
              read_csv, col_types = cols(.default = 'c'))
 
-d = d %>%
+dmr = dmr %>%
     select(year = Year, state = State, county = County,
            cas = `CAS Number`, load_kg = `Pollutant Load (kg/yr)`,
-           lat = `Facility Latitude`, lon = `Facility Longitude`,
-           `% Load from Limits`) %>%
-    mutate(across(all_of(c('year', 'load_kg', 'lat', 'lon', '% Load from Limits')),
+           lat = `Facility Latitude`, lon = `Facility Longitude`) %>%
+           # `% Load from Limits`) %>%
+    mutate(across(all_of(c('year', 'load_kg', 'lat', 'lon')),#, '% Load from Limits')),
                   as.numeric)) %>%
-    mutate(load_kg = ifelse(load_kg < 0, 0, load_kg)) %>%
-    filter(! is.na(load_kg) & load_kg != 0) %>%
-    filter(year >= 2010)
+    filter(! is.na(load_kg) & load_kg > 0) %>%
+    filter(year >= earliest_year) %>%
+    left_join(county_centroids, by = c('state', 'county')) %>%
+    mutate(location_set_to_county_centroid = ifelse(is.na(lat), TRUE, FALSE),
+           lat = ifelse(is.na(lat), cty_lat, lat),
+           lon = ifelse(is.na(lon), cty_lon, lon)) %>%
+    select(-cty_lat, -cty_lon) %>%
+    mutate(source = 'DMR')
 
 # maxes_by_cas = d %>%
 #     group_by(cas) %>%
@@ -58,74 +64,21 @@ d = d %>%
 #
 # d = d[rep(row.names(d), times = d$row_dupe_factor), ]
 
-for(loc in c('Houston', 'Port Arthur', 'Louisville', 'Cancer Alley')){
 
-    if(loc == 'Houston'){
-        dd = filter(d, toupper(state) == 'TX', toupper(county) %in% houston_counties)
-        map_scale = 10
-    } else if(loc == 'Port Arthur'){
-        dd = filter(d, toupper(state) == 'TX', toupper(county) == 'JEFFERSON')
-        map_scale = 10
-    } else if(loc == 'Louisville'){
-        dd = filter(d, toupper(state) == 'KY')
-        map_scale = 10
-    } else {
-        dd = filter(d, toupper(state) == 'LA')
-        map_scale = 9
-    }
+# harmonize NEI data ####
 
-    map_center = c(mean(dd$lon, na.rm=TRUE),
-                   mean(dd$lat, na.rm=TRUE))
+nei = read_csv('data/nei/nei_joined.csv', col_types = cols(.default = 'c'))
 
-    latrange = range(dd$lat, na.rm = TRUE)
-    latrange[1] = latrange[1] - 0.1
-    latrange[2] = latrange[2] + 0.1
-    lonrange = range(dd$lon, na.rm = TRUE) + 0.1
-    lonrange[1] = lonrange[1] - 0.1
-    lonrange[2] = lonrange[2] + 0.1
+nei = nei %>%
+    mutate(load_kg = as.numeric(EMISSIONS) / 2.2046) %>% # lbs to kg
+    select(year = INVENTORY_YEAR, state = STATE, county = COUNTY,
+           cas = POLLUTANT_CODE, load_kg,
+           lat = LATITUDE, lon = LONGITUDE, location_set_to_county_centroid) %>%
+           # `% Load from Limits`) %>%
+    mutate(across(all_of(c('year', 'load_kg', 'lat', 'lon')),#, '% Load from Limits')),
+                  as.numeric)) %>%
+    filter(! is.na(load_kg) & load_kg > 0) %>%
+    filter(year >= earliest_year) %>%
+    mutate(source = 'NEI')
 
-    if(nrow(dd)){
-        ej_heatmap(dd, center = map_center, scale = map_scale, res = 1/60,
-                   latrange = latrange, lonrange = lonrange, addpoints = TRUE,
-                   fileout = glue('figs/heatmaps/{lc}_allchems_allyears.png',
-                                  lc = loc))
-    } else next
 
-    for(chem in cas$CASRN_nohyphens){
-
-        ddc = filter(dd, cas == chem)
-
-        if(nrow(ddc)){
-            ej_heatmap(ddc, center = map_center, scale = map_scale, res = 1/60,
-                       latrange = latrange, lonrange = lonrange, addpoints = TRUE,
-                       fileout = glue('figs/heatmaps/by_chem/{lc}_{ch}_allyears.png',
-                                      lc = loc,
-                                      ch = chem))
-        } else next
-
-        for(yr in 2010:2021){
-
-            ddy = filter(ddc, year == yr)
-
-            if(nrow(ddy)){
-                ej_heatmap(ddy, center = map_center, scale = map_scale, res = 1/60,
-                           latrange = latrange, lonrange = lonrange, addpoints = TRUE,
-                           fileout = glue('figs/heatmaps/by_chem/by_year/{lc}_{ch}_{yr}.png',
-                                          lc = loc,
-                                          ch = chem,
-                                          yr = yr))
-            }
-        }
-
-        #HERE: USE THE COMMENTED CODE BELOW TO STITCH PDFS FOR EACH CHEM BY LOCATION
-        #THEN BIND BY YEAR INTO A GIF
-    }
-
-    #AND HERE, DO THE SAME ACROSS ALL CHEMS?
-}
-
-# list.files('figs/heatmaps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
-#     image_read() %>% # reads each path file
-#     image_join() %>% # joins image
-#     image_animate(fps=4) %>% # animates, can opt for number of loops
-#     image_write("FileName.gif") # write to current dir

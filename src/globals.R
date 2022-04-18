@@ -248,10 +248,10 @@ query_ef_table = function(table_name,
                           operator=NULL,
                           column_value=NULL,
                           specify_rows=TRUE,
-                          chunk_size=1e5,
+                          chunk_size=1e4,
                           custom_chunks=NULL,
                           rtn_fmt='csv',
-                          timeout_=30,
+                          timeout_=120,
                           timeout_action='fail',
                           warn=TRUE,
                           verbose=FALSE,
@@ -627,5 +627,9 @@ ej_heatmap = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE
                              radius = 1, col = 'black', fill = FALSE)
     }
 
-    mapshot(mapout, file = fileout)
+    if(grepl('\\.html$', fileout)){
+        mapshot(mapout, url = fileout)
+    } else {
+        mapshot(mapout, file = fileout)
+    }
 }

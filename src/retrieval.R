@@ -130,19 +130,24 @@ for(i in seq_len(nrow(cas))){
 ## 3 - TRI: envirofacts REST service ####
 
 for(i in seq_len(nrow(cas))){
+for(i in 5:nrow(cas)){
 
     srs_id = cas$SRS_id[i]
-    print(paste('working on chem:', srs_id))
+    print(paste0(Sys.time(), ' working on chem: ', srs_id, ' (', i, ' of ', nrow(cas), ')'))
 
     #chemicals
+    print(paste(Sys.time(), 'getting chem data'))
     chems = query_ef_table(table_name=c('TRI_CHEM_INFO'), column_name='SRS_ID', operator='=',
                            column_value=as.character(srs_id), warn=TRUE)
     if(nrow(chems) > 1) stop('hm? pick a row.')
 
     #facilities
+    print(paste(Sys.time(), 'getting facility data'))
     facil_fails = c()
     facil = tibble()
     for(j in seq_len(nrow(cities))){
+
+        print(paste('county', j, 'of', nrow(cities)))
 
         facil_ = tibble()
         city = cities[j, ]
@@ -177,9 +182,10 @@ for(i in seq_len(nrow(cas))){
     uniq_facils = unique(facil$TRI_FACILITY_ID)
 
     #report forms
+    print(paste(Sys.time(), 'getting report data'))
     rep_frms <- try({
         query_ef_table(table_name=c('TRI_REPORTING_FORM'), column_name='TRI_CHEM_ID', operator='=',
-                       column_value=chems$TRI_CHEM_ID, warn=TRUE)
+                       column_value=chems$TRI_CHEM_ID, warn=TRUE, verbose=TRUE)
     })
     if(inherits(rep_frms, 'try-error')) next
     rep_frms = filter(rep_frms, TRI_FACILITY_ID %in% uniq_facils)
@@ -187,6 +193,7 @@ for(i in seq_len(nrow(cas))){
     docnums = unique(rep_frms$DOC_CTRL_NUM)
 
     #releases
+    print(paste(Sys.time(), 'getting release data'))
     release_fails = c()
     releases = tibble()
     for(docnum in docnums){
@@ -194,7 +201,7 @@ for(i in seq_len(nrow(cas))){
         tryres = try({
             releases_ = query_ef_table(table_name=c('TRI_RELEASE_QTY'),
                                        column_name='DOC_CTRL_NUM', operator='=',
-                                       column_value=docnum, warn=TRUE)
+                                       column_value=docnum, warn=TRUE, verbose=TRUE)
             releases = bind_rows(releases, releases_)
         })
 
@@ -205,6 +212,7 @@ for(i in seq_len(nrow(cas))){
     }
 
     #environments
+    print(paste(Sys.time(), 'getting environment data'))
     water_fails = c()
     water = tibble()
     for(docnum in docnums){
@@ -212,7 +220,7 @@ for(i in seq_len(nrow(cas))){
         tryres = try({
             water_ = query_ef_table(table_name=c('TRI_WATER_STREAM'),
                                       column_name='DOC_CTRL_NUM', operator='=',
-                                      column_value=docnum, warn=TRUE)
+                                      column_value=docnum, warn=TRUE, verbose=TRUE)
             water = bind_rows(water, water_)
         })
 
@@ -222,7 +230,7 @@ for(i in seq_len(nrow(cas))){
         }
     }
 
-    # system('spd-say chicken')
+    # system('spd-say done')
     # dd = releases[duplicated(releases$DOC_CTRL_NUM), ]
     # dd[duplicated(dd$DOC_CTRL_NUM), ]
     # intersect(colnames(rep_frms), colnames(facil))
@@ -236,36 +244,32 @@ for(i in seq_len(nrow(cas))){
 
     write_csv(chemd, paste0('data/tri/raw/', cas$CASRN[i], '.csv'))
 
-    #write map
-    site_locs = chemd %>%
-        select(lon=FAC_LONGITUDE, lat=FAC_LATITUDE, everything()) %>%
-        # distinct() %>%
-        filter(! is.na(lon) & ! is.na(lat)) %>%
-        mutate(lon = -sw(dms_to_decdeg(lon)),
-               lat = sw(dms_to_decdeg(lat))) %>%
-        filter(! is.na(lon) & ! is.na(lat)) %>%
-        sf::st_as_sf(coords=c('lon', 'lat'),
-                     crs = 4326)
-
-    sites_all = mv(site_locs)
-    sites_with_releases = filter(site_locs, ! is.na(TOTAL_RELEASE))
-
-    if(nrow(sites_with_releases)){
-        sites_with_releases = mv(sites_with_releases, color = 'red')
-    } else {
-        sites_with_releases = NULL
-    }
-
-    mapshot(sites_all + sites_with_releases,
-            url = paste0('figs/tri_', cas$CASRN[i], '.html'))
+    # #write map
+    # site_locs = chemd %>%
+    #     select(lon=FAC_LONGITUDE, lat=FAC_LATITUDE, everything()) %>%
+    #     # distinct() %>%
+    #     filter(! is.na(lon) & ! is.na(lat)) %>%
+    #     mutate(lon = -sw(dms_to_decdeg(lon)),
+    #            lat = sw(dms_to_decdeg(lat))) %>%
+    #     filter(! is.na(lon) & ! is.na(lat)) %>%
+    #     sf::st_as_sf(coords=c('lon', 'lat'),
+    #                  crs = 4326)
+    #
+    # sites_all = mv(site_locs)
+    # sites_with_releases = filter(site_locs, ! is.na(TOTAL_RELEASE))
+    #
+    # if(nrow(sites_with_releases)){
+    #     sites_with_releases = mv(sites_with_releases, color = 'red')
+    # } else {
+    #     sites_with_releases = NULL
+    # }
+    #
+    # mapshot(sites_all + sites_with_releases,
+    #         url = paste0('figs/tri_', cas$CASRN[i], '.html'))
 }
 
 
-## 4 - [NEEDS WORK] NEI: envirofacts REST service ####
-
-#this is almost ready. just need to find out why so many requests toward the end of
-#   FACILITIES fail. might require honing in on the rows that are producing those
-#   errors.
+## 4 - NEI: envirofacts REST service ####
 
 facil_fails = c()
 facil = tibble()
@@ -304,35 +308,52 @@ for(i in seq_len(nrow(cas))){
 }
 
 # write_csv(facil, 'data/nei/facility_summary.csv')
-facil =  read_csv('data/nei/facility_summary.csv', col_types = cols(.default = 'c'))
+# facil =  read_csv('data/nei/facility_summary.csv', col_types=cols(.default = 'c'))
 
 #supplement with facility lat/longs
+locations = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE, chunk_size=1e4)
+# write_csv(locations, 'data/nei/locations.csv')
+# locations =  read_csv('data/nei/locations.csv', col_types = cols(.default = 'c'))
 
-fac_rows = query_ef_rows(table_name='FACILITIES')
-fac_chunks = get_chunksets(nrows=fac_rows, maxrows=1e4)
-fac_chunks = c(fac_chunks[1:3], '30000:31500', '31501:31600', '31601:39999',
-               fac_chunks[5:6], '60000:61500', '61501:61600', '61601:69999',
-               fac_chunks[8:10])
-# fac_chunks = c(fac_chunks[1:6], '30000:31500', '31501:31600', '31601:39999', fac_chunks[9:20])
-# fac_chunks=c('60000:61500', '61501:61600', '61601:69999')
-locations = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE,
-                           custom_chunks=fac_chunks[1:7], timeout_=10,
-                           debug_=F, timeout_action='skip')
-locations1 = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE,
-                           custom_chunks=fac_chunks[8:15], timeout_=10,
-                           debug_=F, timeout_action='skip')
-locations = bind_rows(locations, locations1)
-# locations = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE, chunk_size=1e4)
-release_pts = query_ef_table(table_name='RELEASE_POINTS', warn=TRUE, verbose=TRUE)
-
+release_pts = query_ef_table(table_name='RELEASE_POINTS', warn=TRUE, verbose=TRUE, chunk_size=1e4)
 # write_csv(release_pts, 'data/nei/release_points.csv')
 # release_pts = read_csv('data/nei/release_points.csv', col_types = cols(.default = 'c'))
 
+#bind facility latlong and release point latlong to facility summary table.
+#if release point latlong missing, use facil latlong. if both missing, use
+#county centroid
 nei = locations %>%
-    select(EIS_FACILITY_ID, FACILITY_ID, LATITUDE, LONGITUDE) %>%
-    right_join(facil, by = 'EIS_FACILITY_ID')
+    select(EIS_FACILITY_ID, FACILITY_ID, facil_lat = LATITUDE, facil_lon = LONGITUDE) %>%
+    right_join(facil, by = 'EIS_FACILITY_ID') %>%
+    filter(! is.na(EMISSIONS) & EMISSIONS > 0) %>%
+    left_join(select(release_pts, FACILITY_ID, LATITUDE, LONGITUDE),
+              by = 'FACILITY_ID') %>%
+    mutate(LATITUDE = ifelse(is.na(LATITUDE), facil_lat, LATITUDE),
+           LONGITUDE = ifelse(is.na(LONGITUDE), facil_lon, LONGITUDE),
+           COUNTY = clean_county_names(COUNTY)) %>%
+    left_join(select(cities, STATE = state, COUNTY = county, lat, lon) %>%
+                  mutate(COUNTY = clean_county_names(COUNTY)),
+              by = c('STATE', 'COUNTY'))
 
-write_csv('')
+nei$location_set_to_county_centroid = FALSE
+nei$location_set_to_county_centroid[is.na(nei$LATITUDE)] = TRUE
+
+nei = nei %>%
+    mutate(LATITUDE = ifelse(is.na(LATITUDE), lat, LATITUDE),
+           LONGITUDE = ifelse(is.na(LONGITUDE), lon, LONGITUDE)) %>%
+    select(-facil_lat, -facil_lon, -lat, -lon)
+
+# nei %>%
+#     filter(is.na(LATITUDE),
+#            ! is.na(EMISSIONS) & EMISSIONS > 0,
+#            INVENTORY_YEAR >= 2012) %>%
+#     # select(COMPANY_NAME, SITE_NAME) %>%
+#     # print(n=100)
+#     distinct(COMPANY_NAME) %>%
+#     pull()
+#     # {table(.$INVENTORY_YEAR)}
+
+write_csv(nei, 'data/nei/nei_joined.csv')
 
 ## 5 - DMR: REST service ####
 
@@ -377,6 +398,14 @@ for(i in seq_len(nrow(cas))){
 
 
 ## 6 - ECHO (NPDES): data download ####
+
+#TODO: something like this:
+# filter(xx, ! grepl('receipt', RNC_DETECTION_DESC, ignore.case = T)) %>%
+#     slice(1:10) %>%
+#     select(LIMIT_VALUE_STANDARD_UNITS, DMR_VALUE_STANDARD_UNITS, EXCEEDENCE_PCT) %>%
+#     as.data.frame()
+# also need dates
+
 
 #SOURCE: https://echo.epa.gov/tools/data-downloads/icis-npdes-data-set
 #   click on texas, kentucky, and louisiana. unzip resulting downloads. put them in ./data/echo
