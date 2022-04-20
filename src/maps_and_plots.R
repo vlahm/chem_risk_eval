@@ -24,23 +24,26 @@ cities = read_csv('data/general/cities.csv', col_types=cols())
 
 houston_counties = cities %>%
     filter(! is.na(city) & city == 'HOUSTON') %>%
-    pull(county)
+    pull(county) %>%
+    clean_county_names()
+
+emissions = read_csv('data/emissions_harmonized.csv')
 
 # maps ####
 
 for(loc in c('Houston', 'Port Arthur', 'Louisville', 'Cancer Alley')){
 
     if(loc == 'Houston'){
-        dd = filter(d, toupper(state) == 'TX', toupper(county) %in% houston_counties)
+        dd = filter(emissions, state == 'TX', county %in% houston_counties)
         map_scale = 10
     } else if(loc == 'Port Arthur'){
-        dd = filter(d, toupper(state) == 'TX', toupper(county) == 'JEFFERSON')
+        dd = filter(emissions, state == 'TX', county == 'JEFFERSON')
         map_scale = 10
     } else if(loc == 'Louisville'){
-        dd = filter(d, toupper(state) == 'KY')
+        dd = filter(emissions, state == 'KY')
         map_scale = 10
     } else {
-        dd = filter(d, toupper(state) == 'LA')
+        dd = filter(emissions, state == 'LA')
         map_scale = 9
     }
 
@@ -58,7 +61,7 @@ for(loc in c('Houston', 'Port Arthur', 'Louisville', 'Cancer Alley')){
         ej_heatmap(dd, center = map_center, scale = map_scale, res = 1/60,
                    latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                    fileout = glue('figs/heatmaps/{lc}_allchems_allyears.html',
-                                  lc = loc))
+                                  lc = gsub(' ', '_', tolower(loc))))
     } else next
 
     for(chem in cas$CASRN_nohyphens){
@@ -69,7 +72,7 @@ for(loc in c('Houston', 'Port Arthur', 'Louisville', 'Cancer Alley')){
             ej_heatmap(ddc, center = map_center, scale = map_scale, res = 1/60,
                        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                        fileout = glue('figs/heatmaps/by_chem/{lc}_{ch}_allyears.html',
-                                      lc = loc,
+                                      lc = gsub(' ', '_', tolower(loc)),
                                       ch = chem))
         } else next
 
@@ -81,7 +84,7 @@ for(loc in c('Houston', 'Port Arthur', 'Louisville', 'Cancer Alley')){
                 ej_heatmap(ddy, center = map_center, scale = map_scale, res = 1/60,
                            latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                            fileout = glue('figs/heatmaps/by_chem/by_year/{lc}_{ch}_{yr}.html',
-                                          lc = loc,
+                                          lc = gsub(' ', '_', tolower(loc)),
                                           ch = chem,
                                           yr = yr))
             }
