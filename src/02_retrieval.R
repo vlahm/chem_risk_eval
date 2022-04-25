@@ -9,35 +9,17 @@ mv = mapview::mapview
 sw = suppressWarnings
 sm = suppressMessages
 
-#TODO:
-#find a way to get variant spellings of county names in TRI. could just search for all alternatives:
-#   ST JOHN, ST. JOHN, SAINT JOHN, SAINT JOHN THE BAPTIST
-
 setwd('earthjustice/chem_risk_eval/')
 
 ## 0 - setup ####
 
-source('src/globals.R')
-
-## 1 [RUN ONCE] - retrieve (and write) more information on each substance
-
-# d = get_substance_by_cas(cas$CASRN_nohyphens)
-#
-# cas2 = d %>%
-#     select(-any_of(c('classifications', 'characterics', 'synonyms', 'casNumbers',
-#                      'relationships', 'taxonomicSerialNumbers'))) %>%
-#     right_join(cas, by = c(currentCasNumber='CASRN')) %>%
-#     select(ej_name=name, CASRN=currentCasNumber, CASRN_nohyphens, SRS_id=internalTrackingNumber,
-#            everything()) %>%
-#     arrange(ej_name)
-#
-# write_csv(cas2, 'data/general/target_substances.csv')
+source('src/00_globals.R')
 
 cas = read_csv('data/general/target_substances.csv', col_types=cols())
 
 cities = read_csv('data/general/cities.csv', col_types=cols())
 
-## 2 - [ABANDONED] ICIS-AIR: envirofacts REST service ####
+## 1 - [ABANDONED] ICIS-AIR: envirofacts REST service ####
 
 # icis_air_chem = tibble()
 # for(i in 10:nrow(cas)){
@@ -127,7 +109,7 @@ for(i in seq_len(nrow(cas))){
     # icis_air_chem = bind_rows(icis_air_chem, icis_air_chem_)
 }
 
-## 3 - TRI: envirofacts REST service ####
+## 2 - TRI: envirofacts REST service ####
 
 for(i in seq_len(nrow(cas))){
 
@@ -219,6 +201,14 @@ for(i in seq_len(nrow(cas))){
         }
     }
 
+    # https://enviro.epa.gov/enviro/EF_METADATA_HTML.tri_page?p_column_name=RELEASE_RANGE_CODE
+    releases = mutate(releases,
+                      TOTAL_RELEASE = case_when(RELEASE_RANGE_CODE == 1 ~ 5.5,
+                                                RELEASE_RANGE_CODE == 2 ~ 250,
+                                                RELEASE_RANGE_CODE == 3 ~ 255,
+                                                RELEASE_RANGE_CODE == 4 ~ 749.5,
+                                                RELEASE_RANGE_CODE == 5 ~ 5.5))
+
     # #environments
     # print(paste(Sys.time(), 'getting environment data'))
     # water_fails = c()
@@ -243,10 +233,49 @@ for(i in seq_len(nrow(cas))){
     # }
 
     #write data
-    chemd = full_join(rep_frms, facil, by = 'TRI_FACILITY_ID') %>%
-        full_join(chems, by = 'TRI_CHEM_ID') %>%
-        full_join(releases, by = 'DOC_CTRL_NUM')
-        # full_join(water, by = 'DOC_CTRL_NUM')
+    chemd = left_join(rep_frms, facil, by = 'TRI_FACILITY_ID') %>%
+        left_join(chems, by = 'TRI_CHEM_ID') %>%
+        left_join(releases, by = 'DOC_CTRL_NUM')
+        # left_join(water, by = 'DOC_CTRL_NUM')
+
+    # chemd %>%
+    #     group_by(CAS_REGISTRY_NUMBER, ENVIRONMENTAL_MEDIUM, REPORTING_YEAR,
+    #              STATE_ABBR, COUNTY_NAME, TRI_FACILITY_ID, DOC_CTRL_NUM) %>%
+    #     summarize(across(everything(), function(x) length(unique(x)))) %>%
+    #     ungroup() %>%
+    #     filter(if_any(c('WATER_SEQUENCE_NUM', 'RELEASE_RANGE_CODE', 'TOTAL_RELEASE',
+    #                            'RELEASE_NA', 'RELEASE_BASIS_EST_CODE'),
+    #                   ~(. != 1))) %>%
+    #     select(all_of(c('CAS_REGISTRY_NUMBER', 'ENVIRONMENTAL_MEDIUM', 'REPORTING_YEAR',
+    #              'STATE_ABBR', 'COUNTY_NAME', 'TRI_FACILITY_ID', 'DOC_CTRL_NUM', 'WATER_SEQUENCE_NUM', 'RELEASE_RANGE_CODE', 'TOTAL_RELEASE',
+    #                      'RELEASE_NA', 'RELEASE_BASIS_EST_CODE')))->xx
+    # chemd %>%
+    #     filter(CAS_REGISTRY_NUMBER == '50-00-0',
+    #
+    #     distinct(CAS_REGISTRY_NUMBER, ENVIRONMENTAL_MEDIUM, REPORTING_YEAR,
+    #              STATE_ABBR, COUNTY_NAME, TRI_FACILITY_ID, DOC_CTRL_NUM,
+    #              .keep_all = TRUE) %>%
+    #     mutate(lat = ifelse(FAC_LATITUDE == '0', NA, FAC_LATITUDE),
+    #            lon = ifelse(FAC_LONGITUDE == '0', NA, FAC_LONGITUDE)) %>%
+    #     filter(! is.na(CAS_REGISTRY_NUMBER)) %>%
+    #     mutate(load_kg = as.numeric(TOTAL_RELEASE) / 2.2046, # lbs to kg
+    #            cas = gsub('-', '', CAS_REGISTRY_NUMBER),
+    #            medium = case_when(grepl('AIR', ENVIRONMENTAL_MEDIUM) ~ 'air',
+    #                               grepl('WATER', ENVIRONMENTAL_MEDIUM) ~ 'water',
+    #                               grepl('LANDF|UNINJ', ENVIRONMENTAL_MEDIUM) ~ 'ground',
+    #                               TRUE ~ 'surface')) %>%
+    #     select(year = REPORTING_YEAR, state = STATE_ABBR, county = COUNTY_NAME,
+    #            cas, load_kg, medium, lat, lon, TRI_FACILITY_ID) %>%
+    #     mutate(across(all_of(c('year', 'load_kg', 'lat', 'lon')),
+    #                   as.numeric)) %>%
+    #     filter(! is.na(load_kg) & load_kg > 0) %>%
+    #     filter(year >= 2010) %>%
+    #
+    #     # filter(state == 'KY', county == 'JEFFERSON') %>%
+    #     filter(state == 'LA', year == '2019') %>%
+    #     group_by(cas, year) %>%
+    #     summarize(load_kg = mean(load_kg)) %>%
+    #     print(n=100)
 
     write_csv(chemd, paste0('data/tri/raw/', cas$CASRN[i], '.csv'))
 
@@ -275,7 +304,7 @@ for(i in seq_len(nrow(cas))){
 }
 
 
-## 4 - NEI: envirofacts REST service ####
+## 3 - NEI: envirofacts REST service ####
 
 facil_fails = c()
 facil = tibble()
@@ -361,7 +390,7 @@ nei = nei %>%
 
 write_csv(nei, 'data/nei/nei_joined.csv')
 
-## 5 - DMR: REST service ####
+## 4 - DMR: REST service ####
 
 dmr_fail = c()
 for(i in seq_len(nrow(cas))){
@@ -403,15 +432,7 @@ for(i in seq_len(nrow(cas))){
 }
 
 
-## 6 - ECHO (NPDES): data download ####
-
-#TODO: something like this:
-# filter(xx, ! grepl('receipt', RNC_DETECTION_DESC, ignore.case = T)) %>%
-#     slice(1:10) %>%
-#     select(LIMIT_VALUE_STANDARD_UNITS, DMR_VALUE_STANDARD_UNITS, EXCEEDENCE_PCT) %>%
-#     as.data.frame()
-# also need dates
-
+## 5 - ECHO (NPDES): data download ####
 
 #SOURCE: https://echo.epa.gov/tools/data-downloads/icis-npdes-data-set
 #   click on texas, kentucky, and louisiana. unzip resulting downloads. put them in ./data/echo
@@ -424,7 +445,9 @@ d = map_dfr(list.files('data/dmr', full.names = TRUE),
             read_csv, col_types = cols(.default = 'c'))
 
 permit_facility_mapping = distinct(d, `NPDES Permit Number`, FRS_ID=`FRS ID`,
-                                   `Facility Latitude`, `Facility Longitude`)
+                                   `Facility Latitude`, `Facility Longitude`,
+                                   State, County)
+paramcode_cas_mapping = distinct(d, `Parameter Code`, `CAS Number`)
 
 dmr_chem_codes = unique(d$`Parameter Code`)
 
@@ -450,13 +473,58 @@ echo = map_dfr(c('data/echo/LA_NPDES_EFF_VIOLATIONS.csv',
                  'data/echo/KY_NPDES_EFF_VIOLATIONS.csv'),
                read_csv, col_types = cols(.default = 'c'))
 
-echo = echo %>%
-    filter(! is.na(DMR_VALUE_STANDARD_UNITS),
-           PARAMETER_CODE %in% dmr_chem_codes) %>%
-    left_join(permit_facility_mapping,
-              by = c(NPDES_ID = 'NPDES Permit Number'))
+echo2 = echo %>%
+    filter(PARAMETER_CODE %in% dmr_chem_codes,
+           grepl('numeric violation$', VIOLATION_DESC, ignore.case = TRUE))
 
-write_csv(echo, 'data/npdes_illegal_releases.csv')
+#still missing some facility data. pick up anything we've missed
+unaccounted_permits = echo2 %>%
+    filter(! NPDES_ID %in% unique(d$`NPDES Permit Number`)) %>%
+    distinct(NPDES_ID) %>%
+    pull()
+
+permit_facility_mapping2 = tibble()
+for(up in unaccounted_permits){
+
+    query_base = 'https://echodata.epa.gov/echo/dmr_rest_services.get_custom_data_annual?output=CSV'
+    query_mid = '&p_est=Y&p_loads_data=DMR&p_nd=ZERO&p_nutrient_agg=N&p_param_group=N'
+    permit_addon = paste0('&p_permit_id=', up)
+
+    query = paste0(query_base, query_mid, permit_addon)
+
+    tryresp = try({
+        r = httr::GET(query)
+        d = httr::content(r, as='text', encoding='UTF-8')
+        d = read_csv(d, col_types = cols(.default = 'c'), skip = 2) %>%
+            mutate(County = clean_county_names(County))
+
+        print(unique(d$County))
+
+        permit_facility_mapping2 = d %>%
+            filter(County %in% clean_county_names(cities$county)) %>%
+            slice(1) %>%
+            select(`Parameter Code`, `CAS Number`, `NPDES Permit Number`,
+                   FRS_ID =`FRS ID`, `Facility Latitude`, `Facility Longitude`,
+                   State, County) %>%
+            bind_rows(permit_facility_mapping2)
+    })
+}
+
+permit_facility_mapping = bind_rows(permit_facility_mapping,
+                                    select(permit_facility_mapping2,
+                                           -any_of(c('CAS Number', 'Parameter Code'))))
+paramcode_cas_mapping = bind_rows(paramcode_cas_mapping,
+                                    select(permit_facility_mapping2,
+                                           `CAS Number`, `Parameter Code`))
+
+echo = echo2 %>%
+    left_join(permit_facility_mapping,
+              by = c(NPDES_ID = 'NPDES Permit Number')) %>%
+    filter(! is.na(County)) %>%
+    left_join(paramcode_cas_mapping,
+              by = c(PARAMETER_CODE = 'Parameter Code'))
+
+write_csv(echo, 'data/echo/npdes_violations.csv')
 
 ## x - other things to attempt? ####
 
@@ -465,18 +533,3 @@ write_csv(echo, 'data/npdes_illegal_releases.csv')
 #compile data from ECHO? (or already covered by the above?
 
 #compile more event details using LIMIT_ID, DMR_EVENT_ID, DMR_FORM_ID
-
-## y - EPA's TRI-DRM comparison portal ####
-#(water pollutant loading tool custom search)
-#https://echo.epa.gov/trends/loading-tool/get-data/custom-search/
-
-d = read_csv('data/chem/epa_dmr_tri_portal/louisville_2020.csv',
-             skip=3,
-             name_repair='universal')
-
-d_tab = table(d$CAS.Number)
-
-cas$CASRN_nohyphens %in% names(d_tab)
-
-dd = d %>%
-    filter(CAS.Number == 106467)

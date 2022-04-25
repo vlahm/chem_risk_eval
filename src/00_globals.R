@@ -498,6 +498,7 @@ clean_county_names = function(x){
     x = toupper(x)
     x = gsub('[\\. \\-]', '', x)
     x = sub('PARISH$', '', x)
+    x = sub('COUNTY$', '', x)
     x = sub('THEBAPTIST$', '', x)
     x = sub('^SAINT', 'ST', x)
 

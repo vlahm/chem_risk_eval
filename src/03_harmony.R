@@ -13,7 +13,7 @@ earliest_year = 2010
 
 # setup ####
 
-source('src/globals.R')
+source('src/00_globals.R')
 
 cas = read_csv('data/general/target_substances.csv', col_types=cols())
 
@@ -22,6 +22,11 @@ cities = read_csv('data/general/cities.csv', col_types=cols())
 # houston_counties = cities %>%
 #     filter(! is.na(city) & city == 'HOUSTON') %>%
 #     pull(county)
+
+houston_counties = cities %>%
+    filter(! is.na(city) & city == 'HOUSTON') %>%
+    pull(county) %>%
+    clean_county_names()
 
 county_centroids = cities %>%
     select(state, county, cty_lat = lat, cty_lon = lon) %>%
@@ -53,7 +58,14 @@ dmr = dmr %>%
            lat = ifelse(is.na(lat), cty_lat, lat),
            lon = ifelse(is.na(lon), cty_lon, lon)) %>%
     select(-cty_lat, -cty_lon, -`FRS ID`) %>%
-    mutate(source = 'DMR')
+    mutate(source = 'DMR',
+           illegal = FALSE)
+
+# dmr %>%
+#     filter(state == 'KY', county == 'JEFFERSON') %>%
+#     group_by(cas, year) %>%
+#     summarize(load_kg = sum(load_kg)) %>%
+#     print(n=400)
 
 # maxes_by_cas = d %>%
 #     group_by(cas) %>%
@@ -77,6 +89,8 @@ dmr = dmr %>%
 nei = read_csv('data/nei/nei_joined.csv', col_types = cols(.default = 'c'))
 
 nei = nei %>%
+    distinct(POLLUTANT_CODE, INVENTORY_YEAR, SITE_NAME, EMISSIONS,
+             STATE, COUNTY, EIS_FACILITY_ID, .keep_all = TRUE) %>%
     mutate(load_kg = as.numeric(EMISSIONS) / 2.2046,
            medium = NA) %>% # lbs to kg
     select(year = INVENTORY_YEAR, state = STATE, county = COUNTY,
@@ -93,8 +107,12 @@ nei = nei %>%
               location_set_to_county_centroid = ! any(! as.logical(location_set_to_county_centroid)),
               .groups = 'drop') %>%
     select(-EIS_FACILITY_ID) %>%
-    mutate(source = 'NEI')
+    mutate(source = 'NEI',
+           illegal = FALSE)
 
+# nei %>%
+#     group_by(cas, year) %>%
+#     summarize(load_kg = mean(load_kg))
 
 # harmonize TRI data ####
 
@@ -104,6 +122,9 @@ tri = map_dfr(list.files('data/tri/raw/', full.names = TRUE),
 #look for NAs in facility IDs. if they exist, gotta group by some other facil identifier
 
 tri = tri %>%
+    distinct(CAS_REGISTRY_NUMBER, ENVIRONMENTAL_MEDIUM, REPORTING_YEAR,
+             STATE_ABBR, COUNTY_NAME, TRI_FACILITY_ID, DOC_CTRL_NUM,
+             .keep_all = TRUE) %>%
     mutate(lat = ifelse(FAC_LATITUDE == '0', NA, FAC_LATITUDE),
            lon = ifelse(FAC_LONGITUDE == '0', NA, FAC_LONGITUDE)) %>%
     filter(! is.na(CAS_REGISTRY_NUMBER)) %>%
@@ -131,13 +152,82 @@ tri = tri %>%
            lon = ifelse(is.na(lon), cty_lon, dms_to_decdeg(lon)),
            lon = -abs(lon)) %>%
     select(-cty_lat, -cty_lon, -TRI_FACILITY_ID) %>%
-    mutate(source = 'TRI')
+    mutate(source = 'TRI',
+           illegal = FALSE)
+#
+tri %>%
+    # filter(state == 'KY', county == 'JEFFERSON') %>%
+    filter(state == 'LA', year == '2019') %>%
+    group_by(cas, year) %>%
+    summarize(load_kg = sum(load_kg)) %>%
+    print(n=100)
+
+
+# harmonize NPDES violation data ####
+
+npdes = read_csv('data/echo/npdes_violations.csv', col_types = cols(.default = 'c'))
+
+#look for NAs in facility IDs. if they exist, gotta group by some other facil identifier
+
+
+npdes_loads_concs = npdes %>%
+    filter(grepl('numeric violation$', VIOLATION_DESC, ignore.case = TRUE)) %>%
+    mutate(year = year(mdy(VALUE_RECEIVED_DATE))) %>%
+           # state = substr(NPDES_ID, 1, 2)) %>%
+    select(year, state = State, county = County,
+           cas = `CAS Number`,
+           STANDARD_UNIT_DESC, DMR_VALUE_STANDARD_UNITS, STATISTICAL_BASE_SHORT_DESC,
+           lat = `Facility Latitude`, lon = `Facility Longitude`, FRS_ID) %>%
+    mutate(across(all_of(c('year', 'DMR_VALUE_STANDARD_UNITS', 'lat', 'lon')),
+                  as.numeric))
+
+npdes_loads = npdes_loads_concs %>%
+    filter(STANDARD_UNIT_DESC == 'kg/d') %>%
+    mutate(DMR_VALUE_STANDARD_UNITS = ifelse(grepl('^MO ', STATISTICAL_BASE_SHORT_DESC),
+                                             DMR_VALUE_STANDARD_UNITS * 30,
+                                             DMR_VALUE_STANDARD_UNITS)) %>%
+    rename(load_kg = DMR_VALUE_STANDARD_UNITS) %>%
+    select(-STANDARD_UNIT_DESC, -STATISTICAL_BASE_SHORT_DESC) %>%
+    filter(year >= earliest_year) %>%
+    group_by(year, state, county, cas, FRS_ID) %>%
+    summarize(load_kg = sum(load_kg),
+              lat = first(lat),
+              lon = first(lon),
+              .groups = 'drop') %>%
+    mutate(source = 'NPDES',
+           medium = NA,
+           location_set_to_county_centroid = FALSE,
+           illegal = TRUE) %>%
+    select(year, state, county, cas, medium, load_kg, lat, lon,
+           location_set_to_county_centroid, source, illegal)
+
+npdes_concs = npdes_loads_concs %>%
+    filter(STANDARD_UNIT_DESC == 'mg/L') %>%
+    filter(year >= earliest_year) %>%
+    # group_by(year, state, county, cas, FRS_ID) %>%
+    # summarize(concentration_mgL = sum(DMR_VALUE_STANDARD_UNITS),
+    #           lat = first(lat),
+    #           lon = first(lon),
+    #           .groups = 'drop')
+    mutate(source = 'NPDES',
+           medium = NA,
+           location_set_to_county_centroid = FALSE,
+           illegal = TRUE) %>%
+    select(year, state, county, cas, medium,
+           concentration_mgL = DMR_VALUE_STANDARD_UNITS, lat, lon,
+           location_set_to_county_centroid, source, illegal)
 
 
 
 # combine ####
 
 out = bind_rows(dmr, nei) %>%
-    bind_rows(tri)
+    bind_rows(tri) %>%
+    bind_rows(npdes_loads) %>%
+    mutate(target_location = case_when(state == 'LA' ~ 'Cancer Alley',
+                                       state == 'KY' ~ 'Louisville',
+                                       county %in% houston_counties ~ 'Houston',
+                                       TRUE ~ 'Port Arthur'))
 
-write_csv(out, 'data/emissions_harmonized.csv')
+
+write_csv(out, 'data/emissions_harmonized_2010-22.csv')
