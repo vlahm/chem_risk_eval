@@ -639,3 +639,66 @@ ej_heatmap = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE
         mapshot(mapout, file = fileout)
     }
 }
+
+ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE, fileout, title){
+
+    ldmax_true = max(d$load_kg, na.rm = TRUE)
+    dload = log10(d$load_kg)
+
+    cutoff_val = 1
+    d$pointsize = NA
+    newmin = 2
+    newmax = 16
+    dload[dload < log10(cutoff_val)] = log10(cutoff_val)
+
+    # ldmin = min(dload, na.rm = TRUE)
+    ldmin = 1
+    ldmax = 1000000
+    print(round(max(dload, na.rm = TRUE)))
+    ldrng = ldmax - ldmin
+    d$pointsize = ((dload - ldmin) / ldrng) * (newmax - newmin) + newmin
+
+
+    scale_vals = c(1, 10, 100, 1000, 10000, 100000, 1000000, 10000000)
+    scale_vals_scaled = ((log10(scale_vals) - log10(ldmin)) / log10(ldrng)) * (newmax - newmin) + newmin
+    labs_filt = which(scale_vals <= ldmax_true)
+    scale_labs = formatC(scale_vals, format='d', big.mark=',', digits=0)
+    scale_labs[scale_vals == 1] = '(0,1]'
+
+    scale_vals_scaled = scale_vals_scaled[labs_filt]
+    scale_labs = scale_labs[labs_filt]
+
+    addLegendCustom <- function(map, colors, labels, sizes, ...){
+        colorAdditions <- paste0(colors, "; border-radius: 50%; width:", sizes, "px; height:", sizes, "px")
+        labelAdditions <- paste0("<div style='display: inline-block; vertical-align: middle; height: ",
+                                 sizes, "px; margin-top: 4px; line-height: ", sizes, "px;'>",
+                                 labels, "</div>")
+
+        return(addLegend(map, colors = colorAdditions,
+                         labels = labelAdditions, ...))
+    }
+
+    mapout = leaflet() %>%
+        addProviderTiles(providers$CartoDB.Positron) %>%
+        setView(lng = center[1],
+                lat = center[2],
+                zoom = scale) %>%
+        addCircleMarkers(lng = d$lon, lat = d$lat, radius = d$pointsize,
+                   weight = 1,
+                   color = 'blue',
+                   fillColor = 'blue') %>%
+        addControl(paste0('<div class="info" style="font-size: 2em; background-color: rgba(245, 245, 220, 0.5)">', title, '</div>'),
+                   position = "topright", className="map-title") %>%
+        addLegendCustom(colors = rep('blue', length(scale_vals_scaled)),
+                  # values = scale_vals_scaled,
+                  sizes = scale_vals_scaled * 2,
+                  labels = scale_labs,
+                  title = 'Cumulative Load (kg)',
+                  position = 'topright')
+
+    if(grepl('\\.html$', fileout)){
+        mapshot(mapout, url = fileout)
+    } else {
+        mapshot(mapout, file = fileout)
+    }
+}

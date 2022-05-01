@@ -343,7 +343,7 @@ for(i in seq_len(nrow(cas))){
 }
 
 # write_csv(facil, 'data/nei/facility_summary.csv')
-# facil =  read_csv('data/nei/facility_summary.csv', col_types=cols(.default = 'c'))
+# facil = read_csv('data/nei/facility_summary.csv', col_types=cols(.default = 'c'))
 
 #supplement with facility lat/longs
 locations = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE, chunk_size=1e4)
@@ -353,6 +353,8 @@ locations = query_ef_table(table_name='FACILITIES', warn=TRUE, verbose=TRUE, chu
 release_pts = query_ef_table(table_name='RELEASE_POINTS', warn=TRUE, verbose=TRUE, chunk_size=1e4)
 # write_csv(release_pts, 'data/nei/release_points.csv')
 # release_pts = read_csv('data/nei/release_points.csv', col_types = cols(.default = 'c'))
+release_pts <- select(release_pts, FACILITY_ID, LATITUDE, LONGITUDE) %>%
+    distinct()
 
 #bind facility latlong and release point latlong to facility summary table.
 #if release point latlong missing, use facil latlong. if both missing, use
@@ -361,11 +363,15 @@ nei = locations %>%
     select(EIS_FACILITY_ID, FACILITY_ID, facil_lat = LATITUDE, facil_lon = LONGITUDE) %>%
     right_join(facil, by = 'EIS_FACILITY_ID') %>%
     filter(! is.na(EMISSIONS) & EMISSIONS > 0) %>%
-    left_join(select(release_pts, FACILITY_ID, LATITUDE, LONGITUDE),
+    left_join(release_pts,
               by = 'FACILITY_ID') %>%
     mutate(LATITUDE = ifelse(is.na(LATITUDE), facil_lat, LATITUDE),
            LONGITUDE = ifelse(is.na(LONGITUDE), facil_lon, LONGITUDE),
            COUNTY = clean_county_names(COUNTY)) %>%
+    group_by(STATE, COUNTY, LATITUDE, LONGITUDE, POLLUTANT_CODE, INVENTORY_YEAR) %>%
+    summarize(EMISSIONS = sum(as.numeric(EMISSIONS), na.rm = TRUE),
+              across(-EMISSIONS, first),
+              .groups = 'drop') %>%
     left_join(select(cities, STATE = state, COUNTY = county, lat, lon) %>%
                   mutate(COUNTY = clean_county_names(COUNTY)),
               by = c('STATE', 'COUNTY'))

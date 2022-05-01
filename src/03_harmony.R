@@ -135,13 +135,13 @@ tri = tri %>%
                               grepl('LANDF|UNINJ', ENVIRONMENTAL_MEDIUM) ~ 'ground',
                               TRUE ~ 'surface')) %>%
     select(year = REPORTING_YEAR, state = STATE_ABBR, county = COUNTY_NAME,
-           cas, load_kg, medium, lat, lon, TRI_FACILITY_ID) %>%
+           cas, load_kg, medium, lat, lon) %>%
     mutate(across(all_of(c('year', 'load_kg', 'lat', 'lon')),
                   as.numeric)) %>%
     filter(! is.na(load_kg) & load_kg > 0) %>%
     filter(year >= earliest_year) %>%
     # filter(year == 1987, state == 'KY', county=='JEFFERSON', cas=='106990', TRI_FACILITY_ID=='40211BFGDR4100B')
-    group_by(year, state, county, cas, TRI_FACILITY_ID, medium) %>%
+    group_by(year, state, county, cas, lat, lon, medium) %>%
     summarize(load_kg = sum(load_kg),
               lat = first(lat),
               lon = first(lon),
@@ -151,16 +151,16 @@ tri = tri %>%
            lat = ifelse(is.na(lat), cty_lat, dms_to_decdeg(lat)),
            lon = ifelse(is.na(lon), cty_lon, dms_to_decdeg(lon)),
            lon = -abs(lon)) %>%
-    select(-cty_lat, -cty_lon, -TRI_FACILITY_ID) %>%
+    select(-cty_lat, -cty_lon) %>%
     mutate(source = 'TRI',
            illegal = FALSE)
-#
-tri %>%
-    # filter(state == 'KY', county == 'JEFFERSON') %>%
-    filter(state == 'LA', year == '2019') %>%
-    group_by(cas, year) %>%
-    summarize(load_kg = sum(load_kg)) %>%
-    print(n=100)
+
+# tri %>%
+#     # filter(state == 'KY', county == 'JEFFERSON') %>%
+#     filter(state == 'LA', year == '2019') %>%
+#     group_by(cas, year) %>%
+#     summarize(load_kg = sum(load_kg)) %>%
+#     print(n=100)
 
 
 # harmonize NPDES violation data ####
@@ -214,7 +214,8 @@ npdes_concs = npdes_loads_concs %>%
            location_set_to_county_centroid = FALSE,
            illegal = TRUE) %>%
     select(year, state, county, cas, medium,
-           concentration_mgL = DMR_VALUE_STANDARD_UNITS, lat, lon,
+           concentration_mgL = DMR_VALUE_STANDARD_UNITS, STATISTICAL_BASE_SHORT_DESC,
+           lat, lon,
            location_set_to_county_centroid, source, illegal)
 
 
@@ -229,5 +230,33 @@ out = bind_rows(dmr, nei) %>%
                                        county %in% houston_counties ~ 'Houston',
                                        TRUE ~ 'Port Arthur'))
 
+# any(duplicated(select(out, year, state, county, cas, medium, lat, lon, source)))
 
-write_csv(out, 'data/emissions_harmonized_2010-22.csv')
+excess = out %>%
+    filter(location_set_to_county_centroid) %>%
+    group_by(year, target_location, cas, medium, source) %>%
+    # group_by(year, state, county, cas, medium, source) %>%
+    summarize(load_kg_excess = sum(load_kg),
+              .groups = 'drop')
+
+out_avg_load_distributed = out %>%
+    filter(! location_set_to_county_centroid) %>%
+    group_by(year, target_location, cas, medium, source) %>%
+    # group_by(year, state, county, cas, medium, source) %>%
+    mutate(n = n()) %>%
+    left_join(excess) %>%
+    mutate(
+        load_kg_excess = ifelse(is.na(load_kg_excess), 0, load_kg_excess),
+        load_kg = load_kg + (load_kg_excess / n)) %>%
+    ungroup() %>%
+    select(-location_set_to_county_centroid, -n, -load_kg_excess)
+
+# filter(out, year == 2010, target_location == 'Cancer Alley', cas == '107062', source == 'TRI') %>%
+#     group_by(year, cas, medium, source) %>%
+#     summarize(l = sum(load_kg))
+# filter(out_avg_load_distributed, year == 2010, target_location == 'Cancer Alley', cas == '107062', source == 'TRI') %>%
+#     group_by(year, cas, medium, source) %>%
+#     summarize(l = sum(load_kg))
+
+write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')
+write_csv(out_avg_load_distributed, 'data/emissions_harmonized_excess_distributed_evenly_2010-22.csv')
