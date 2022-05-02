@@ -4,7 +4,6 @@ library(sf)
 library(tidyverse)
 library(glue)
 library(lubridate)
-# library(KernSmooth)
 library(leaflet)
 library(mapview)
 library(viridis)
@@ -35,16 +34,22 @@ emissions = read_csv('data/emissions_harmonized_excess_distributed_evenly_2010-2
 
 sources = unique(emissions$source)
 
-dir.create('figs/heatmaps/by_source_and_location', recursive = TRUE, showWarnings = FALSE)
-dir.create('figs/heatmaps/by_source_and_location/by_chem', showWarnings = FALSE)
-dir.create('figs/heatmaps/by_source_and_location/by_year', showWarnings = FALSE)
-dir.create('figs/heatmaps/by_source_and_location/by_chem/by_year', showWarnings = FALSE)
+#create directory structure for storing plots and maps
+dir.create('figs/plots/', recursive = TRUE, showWarnings = FALSE)
+dir.create('figs/load_maps/by_source_and_location', recursive = TRUE, showWarnings = FALSE)
+dir.create('figs/load_maps/by_source_and_location/by_chem', showWarnings = FALSE)
+dir.create('figs/load_maps/by_source_and_location/by_year', showWarnings = FALSE)
+dir.create('figs/load_maps/by_source_and_location/by_chem/by_year', showWarnings = FALSE)
+dir.create('figs/rsei_maps/by_source_and_location', recursive = TRUE, showWarnings = FALSE)
+dir.create('figs/rsei_maps/by_source_and_location/by_chem', showWarnings = FALSE)
+dir.create('figs/rsei_maps/by_source_and_location/by_year', showWarnings = FALSE)
+dir.create('figs/rsei_maps/by_source_and_location/by_chem/by_year', showWarnings = FALSE)
 dir.create('figs/shapefiles/by_source_and_location', recursive = TRUE, showWarnings = FALSE)
 dir.create('figs/shapefiles/by_source_and_location/by_chem', showWarnings = FALSE)
 dir.create('figs/shapefiles/by_source_and_location/by_year', showWarnings = FALSE)
 dir.create('figs/shapefiles/by_source_and_location/by_chem/by_year', showWarnings = FALSE)
 
-# maps ####
+# emissions and RSEI maps, and shapefile output ####
 
 for(loc in unique(emissions$target_location)){
 
@@ -86,18 +91,41 @@ for(loc in unique(emissions$target_location)){
                 latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                 title = glue('{sr}, {lc}: Combined emissions across {nc} of 24 high-priority chemicals, 2010-22',
                              sr = src, nc = length(unique(ddfilt$cas)), lc = loc),
-                fileout = glue('figs/heatmaps/by_source_and_location/{sr}_{lc}_allchems_allyears.html',
+                fileout = glue('figs/load_maps/by_source_and_location/{sr}_{lc}_allchems_allyears.html',
                                sr = tolower(src),
                                lc = gsub(' ', '_', tolower(loc))))
 
-            ddo %>%
-                st_as_sf(coords = c('lon', 'lat'), crs = 4326) %>%
-                st_write(dsn = 'figs/shapefiles/by_source_and_location/',
-                         layer = glue('{sr}_{lc}_allchems_allyears.shp',
-                                      sr = tolower(src),
-                                      lc = gsub(' ', '_', tolower(loc))),
-                         driver = 'ESRI Shapefile',
-                         delete_layer = TRUE, quiet = TRUE)
+            ddo_rsei = ddfilt %>%
+                left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
+                filter(! is.na(rsei_weight)) %>%
+                mutate(rsei_val = load_kg * rsei_weight) %>%
+                group_by(lat, lon) %>%
+                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                          cas = first(cas),
+                          .groups = 'drop')
+
+            if(nrow(ddo_rsei)){
+                ej_map2_pointsize(
+                    ddo_rsei, center = map_center, scale = map_scale, res = 1/60,
+                    latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+                    title = glue('{sr}, {lc}: RSEI-weighted emissions across {nc} of 24 high-priority chemicals, 2010-22',
+                                 sr = src, nc = length(unique(ddo_rsei$cas)), lc = loc),
+                    fileout = glue('figs/rsei_maps/by_source_and_location/{sr}_{lc}_allchems_allyears.html',
+                                   sr = tolower(src),
+                                   lc = gsub(' ', '_', tolower(loc))),
+                    type = 'rsei')
+            }
+
+            if(nrow(ddo)){
+                ddo %>%
+                    st_as_sf(coords = c('lon', 'lat'), crs = 4326) %>%
+                    st_write(dsn = 'figs/shapefiles/by_source_and_location/',
+                             layer = glue('{sr}_{lc}_allchems_allyears.shp',
+                                          sr = tolower(src),
+                                          lc = gsub(' ', '_', tolower(loc))),
+                             driver = 'ESRI Shapefile',
+                             delete_layer = TRUE, quiet = TRUE)
+            }
 
             for(k in 1:nrow(cas)){
 
@@ -119,10 +147,32 @@ for(loc in unique(emissions$target_location)){
                         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                         title = glue('{sr}, {lc}: {ch} (CASRN={cs}) emissions, 2010-22',
                                      sr = src, ch = chem, cs = chem_cas, lc = loc),
-                        fileout = glue('figs/heatmaps/by_source_and_location/by_chem/{sr}_{lc}_{ch}_allyears.html',
+                        fileout = glue('figs/load_maps/by_source_and_location/by_chem/{sr}_{lc}_{ch}_allyears.html',
                                        sr = tolower(src),
                                        lc = gsub(' ', '_', tolower(loc)),
                                        ch = chem_cas))
+
+                    ddc_rsei = ddfilt2 %>%
+                        left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
+                        filter(! is.na(rsei_weight)) %>%
+                        mutate(rsei_val = load_kg * rsei_weight) %>%
+                        group_by(lat, lon) %>%
+                        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                                  cas = first(cas),
+                                  .groups = 'drop')
+
+                    if(nrow(ddc_rsei)){
+                        ej_map2_pointsize(
+                            ddc_rsei, center = map_center, scale = map_scale, res = 1/60,
+                            latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+                            title = glue('{sr}, {lc}: RSEI-weighted {ch} (CASRN={cs}) emissions, 2010-22',
+                                         sr = src, ch = chem, cs = chem_cas, lc = loc),
+                            fileout = glue('figs/rsei_maps/by_source_and_location/by_chem/{sr}_{lc}_{ch}_allyears.html',
+                                           sr = tolower(src),
+                                           lc = gsub(' ', '_', tolower(loc)),
+                                           ch = chem_cas),
+                            type = 'rsei')
+                    }
 
                     ddc %>%
                         st_as_sf(coords = c('lon', 'lat'), crs = 4326) %>%
@@ -150,11 +200,34 @@ for(loc in unique(emissions$target_location)){
                                 latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                                 title = glue('{sr}, {lc}: {ch} (CASRN={cs}) emissions, {yr}',
                                              sr = src, ch = chem, cs = chem_cas, lc = loc, yr = yr),
-                                fileout = glue('figs/heatmaps/by_source_and_location/by_chem/by_year/{sr}_{lc}_{ch}_{yr}.html',
+                                fileout = glue('figs/load_maps/by_source_and_location/by_chem/by_year/{sr}_{lc}_{ch}_{yr}.html',
                                                sr = tolower(src),
                                                lc = gsub(' ', '_', tolower(loc)),
                                                ch = chem_cas,
                                                yr = yr))
+
+                            ddy1_rsei = ddfilt3 %>%
+                                left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
+                                filter(! is.na(rsei_weight)) %>%
+                                mutate(rsei_val = load_kg * rsei_weight) %>%
+                                group_by(lat, lon) %>%
+                                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                                          cas = first(cas),
+                                          .groups = 'drop')
+
+                            if(nrow(ddy1_rsei)){
+                                ej_map2_pointsize(
+                                    ddy1_rsei, center = map_center, scale = map_scale, res = 1/60,
+                                    latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+                                    title = glue('{sr}, {lc}: RSEI-weighted {ch} (CASRN={cs}) emissions, {yr}',
+                                                 sr = src, ch = chem, cs = chem_cas, lc = loc, yr = yr),
+                                    fileout = glue('figs/rsei_maps/by_source_and_location/by_chem/by_year/{sr}_{lc}_{ch}_{yr}.html',
+                                                   sr = tolower(src),
+                                                   lc = gsub(' ', '_', tolower(loc)),
+                                                   ch = chem_cas,
+                                                   yr = yr),
+                                    type = 'rsei')
+                            }
 
                             ddy1 %>%
                                 st_as_sf(coords = c('lon', 'lat'), crs = 4326) %>%
@@ -188,10 +261,32 @@ for(loc in unique(emissions$target_location)){
                         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                         title = glue('{sr}, {lc}: Combined emissions across {nc} of 24 high-priority chemicals, {yr}',
                                      sr = src, nc = length(unique(ddfilt4$cas)), lc = loc, yr = yr),
-                        fileout = glue('figs/heatmaps/by_source_and_location/by_year/{sr}_{lc}_{yr}_allchems.html',
+                        fileout = glue('figs/load_maps/by_source_and_location/by_year/{sr}_{lc}_{yr}_allchems.html',
                                        sr = tolower(src),
                                        lc = gsub(' ', '_', tolower(loc)),
                                        yr = yr))
+
+                    ddy2_rsei = ddfilt4 %>%
+                        left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
+                        filter(! is.na(rsei_weight)) %>%
+                        mutate(rsei_val = load_kg * rsei_weight) %>%
+                        group_by(lat, lon) %>%
+                        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                                  cas = first(cas),
+                                  .groups = 'drop')
+
+                    if(nrow(ddy2_rsei)){
+                        ej_map2_pointsize(
+                            ddy2_rsei, center = map_center, scale = map_scale, res = 1/60,
+                            latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+                            title = glue('{sr}, {lc}: RSEI-weighted emissions across {nc} of 24 high-priority chemicals, {yr}',
+                                         sr = src, nc = length(unique(ddfilt4$cas)), lc = loc, yr = yr),
+                            fileout = glue('figs/rsei_maps/by_source_and_location/by_chem/{sr}_{lc}_{yr}_allchems.html',
+                                           sr = tolower(src),
+                                           lc = gsub(' ', '_', tolower(loc)),
+                                           yr = yr),
+                            type = 'rsei')
+                    }
 
                     ddy2 %>%
                         st_as_sf(coords = c('lon', 'lat'), crs = 4326) %>%
@@ -213,7 +308,14 @@ for(loc in unique(emissions$target_location)){
     #AND HERE, DO THE SAME ACROSS ALL CHEMS?
 }
 
-# list.files('figs/heatmaps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
+# list.files('figs/load_maps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
+#     image_read() %>% # reads each path file
+#     image_join() %>% # joins image
+#     image_animate(fps=4) %>% # animates, can opt for number of loops
+#     image_write("FileName.gif") # write to current dir
+
+
+# list.files('figs/load_maps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
 #     image_read() %>% # reads each path file
 #     image_join() %>% # joins image
 #     image_animate(fps=4) %>% # animates, can opt for number of loops
@@ -340,7 +442,7 @@ emissions %>%
 
 ggsave('figs/plots/NEI_emissions.png', width = 8, height = 8)
 
-# stacked barplots of TRI emissions by release medium ####
+# grouped barplots of TRI emissions by release medium ####
 
 ## across chems
 
@@ -365,3 +467,28 @@ emissions %>%
                   labels = c('0', '1', '10', '100', '1 K', '10 K', '100 K', '1 M', '10 M'))
 
 ggsave('figs/plots/TRI_emissions_by_release_medium.png', width = 8, height = 8)
+
+
+# grouped barplot of West Louisville Air Toxics Study ####
+
+wlats = read_csv('data/west_louisville_air_toxics_study/release_concentrations.csv')
+
+wlats %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')'),
+           site = paste('Site', site)) %>%
+    ggplot(aes(fill = `Chemical (CASRN)`, x = year, y = mean_conc_ugm3, color = `Chemical (CASRN)`)) +
+    geom_col(position = position_dodge2(width = 1, preserve = 'single')) +
+    geom_errorbar(aes(ymin = mean_conc_ugm3, ymax = mean_conc_ugm3+sd, color = `Chemical (CASRN)`), width = .2,
+                  position = position_dodge(.9)) +
+    facet_wrap(.~site, scales = 'fixed') +
+    labs(title = 'West Louisville Air Toxics Study: measured concentrations at 6 sites over 5 years',
+         y = expression('Mean concentration (' * mu * 'gm' ^-3 * ')' + '1 SD')) +
+    guides(x = guide_axis(angle = 55)) +
+    theme_bw() +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_text(hjust=0.3))
+
+ggsave('figs/plots/WLATS_concentrations.png', width = 8, height = 6)

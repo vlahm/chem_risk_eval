@@ -640,7 +640,9 @@ ej_heatmap = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE
     }
 }
 
-ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE, fileout, title){
+ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE, fileout, title, type = 'load'){
+
+    if(! type %in% c('load', 'rsei')) stop('type must be either "load" or "rsei"')
 
     ldmax_true = max(d$load_kg, na.rm = TRUE)
     dload = log10(d$load_kg)
@@ -654,10 +656,8 @@ ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoint
     # ldmin = min(dload, na.rm = TRUE)
     ldmin = 1
     ldmax = 1000000
-    print(round(max(dload, na.rm = TRUE)))
     ldrng = ldmax - ldmin
-    d$pointsize = ((dload - ldmin) / ldrng) * (newmax - newmin) + newmin
-
+    d$pointsize = ((dload - log10(ldmin)) / log10(ldrng)) * (newmax - newmin) + newmin
 
     scale_vals = c(1, 10, 100, 1000, 10000, 100000, 1000000, 10000000)
     scale_vals_scaled = ((log10(scale_vals) - log10(ldmin)) / log10(ldrng)) * (newmax - newmin) + newmin
@@ -678,6 +678,8 @@ ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoint
                          labels = labelAdditions, ...))
     }
 
+    lgnd = ifelse(type == 'load', 'Cumulative Load (kg)', 'RSEI-weighted<br>Cumulative Load (kg)')
+
     mapout = leaflet() %>%
         addProviderTiles(providers$CartoDB.Positron) %>%
         setView(lng = center[1],
@@ -693,7 +695,7 @@ ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoint
                   # values = scale_vals_scaled,
                   sizes = scale_vals_scaled * 2,
                   labels = scale_labs,
-                  title = 'Cumulative Load (kg)',
+                  title = lgnd,
                   position = 'topright')
 
     if(grepl('\\.html$', fileout)){
