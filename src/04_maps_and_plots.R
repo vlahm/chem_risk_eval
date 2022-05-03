@@ -95,13 +95,16 @@ for(loc in unique(emissions$target_location)){
                                sr = tolower(src),
                                lc = gsub(' ', '_', tolower(loc))))
 
-            ddo_rsei = ddfilt %>%
+            ddo_rsei_f = ddfilt %>%
                 left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
-                filter(! is.na(rsei_weight)) %>%
-                mutate(rsei_val = load_kg * rsei_weight) %>%
+                filter(! is.na(rsei_weight))
+
+            load_kg_rsei = ddo_rsei_f$load_kg * ddo_rsei_f$rsei_weight
+            ddo_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddo_rsei_f$load_kg)
+
+            ddo_rsei = ddo_rsei_f %>%
                 group_by(lat, lon) %>%
                 summarize(load_kg = sum(load_kg, na.rm = TRUE),
-                          cas = first(cas),
                           .groups = 'drop')
 
             if(nrow(ddo_rsei)){
@@ -109,7 +112,7 @@ for(loc in unique(emissions$target_location)){
                     ddo_rsei, center = map_center, scale = map_scale, res = 1/60,
                     latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                     title = glue('{sr}, {lc}: RSEI-weighted emissions across {nc} of 24 high-priority chemicals, 2010-22',
-                                 sr = src, nc = length(unique(ddo_rsei$cas)), lc = loc),
+                                 sr = src, nc = length(unique(ddo_rsei_f$cas)), lc = loc),
                     fileout = glue('figs/rsei_maps/by_source_and_location/{sr}_{lc}_allchems_allyears.html',
                                    sr = tolower(src),
                                    lc = gsub(' ', '_', tolower(loc))),
@@ -152,13 +155,16 @@ for(loc in unique(emissions$target_location)){
                                        lc = gsub(' ', '_', tolower(loc)),
                                        ch = chem_cas))
 
-                    ddc_rsei = ddfilt2 %>%
+                    ddc_rsei_f = ddfilt2 %>%
                         left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
-                        filter(! is.na(rsei_weight)) %>%
-                        mutate(rsei_val = load_kg * rsei_weight) %>%
+                        filter(! is.na(rsei_weight))
+
+                    load_kg_rsei = ddc_rsei_f$load_kg * ddc_rsei_f$rsei_weight
+                    ddc_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddc_rsei_f$load_kg)
+
+                    ddc_rsei = ddc_rsei_f %>%
                         group_by(lat, lon) %>%
                         summarize(load_kg = sum(load_kg, na.rm = TRUE),
-                                  cas = first(cas),
                                   .groups = 'drop')
 
                     if(nrow(ddc_rsei)){
@@ -206,13 +212,16 @@ for(loc in unique(emissions$target_location)){
                                                ch = chem_cas,
                                                yr = yr))
 
-                            ddy1_rsei = ddfilt3 %>%
+                            ddy1_rsei_f = ddfilt3 %>%
                                 left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
-                                filter(! is.na(rsei_weight)) %>%
-                                mutate(rsei_val = load_kg * rsei_weight) %>%
+                                filter(! is.na(rsei_weight))
+
+                            load_kg_rsei = ddy1_rsei_f$load_kg * ddy1_rsei_f$rsei_weight
+                            ddy1_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddy1_rsei_f$load_kg)
+
+                            ddy1_rsei = ddy1_rsei_f %>%
                                 group_by(lat, lon) %>%
                                 summarize(load_kg = sum(load_kg, na.rm = TRUE),
-                                          cas = first(cas),
                                           .groups = 'drop')
 
                             if(nrow(ddy1_rsei)){
@@ -266,13 +275,16 @@ for(loc in unique(emissions$target_location)){
                                        lc = gsub(' ', '_', tolower(loc)),
                                        yr = yr))
 
-                    ddy2_rsei = ddfilt4 %>%
+                    ddy2_rsei_f = ddfilt4 %>%
                         left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
-                        filter(! is.na(rsei_weight)) %>%
-                        mutate(rsei_val = load_kg * rsei_weight) %>%
+                        filter(! is.na(rsei_weight))
+
+                    load_kg_rsei = ddy2_rsei_f$load_kg * ddy2_rsei_f$rsei_weight
+                    ddy2_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddy2_rsei_f$load_kg)
+
+                    ddy2_rsei = ddy2_rsei_f %>%
                         group_by(lat, lon) %>%
                         summarize(load_kg = sum(load_kg, na.rm = TRUE),
-                                  cas = first(cas),
                                   .groups = 'drop')
 
                     if(nrow(ddy2_rsei)){
@@ -280,8 +292,8 @@ for(loc in unique(emissions$target_location)){
                             ddy2_rsei, center = map_center, scale = map_scale, res = 1/60,
                             latrange = latrange, lonrange = lonrange, addpoints = TRUE,
                             title = glue('{sr}, {lc}: RSEI-weighted emissions across {nc} of 24 high-priority chemicals, {yr}',
-                                         sr = src, nc = length(unique(ddfilt4$cas)), lc = loc, yr = yr),
-                            fileout = glue('figs/rsei_maps/by_source_and_location/by_chem/{sr}_{lc}_{yr}_allchems.html',
+                                         sr = src, nc = length(unique(ddy2_rsei_f$cas)), lc = loc, yr = yr),
+                            fileout = glue('figs/rsei_maps/by_source_and_location/by_year/{sr}_{lc}_{yr}_allchems.html',
                                            sr = tolower(src),
                                            lc = gsub(' ', '_', tolower(loc)),
                                            yr = yr),
