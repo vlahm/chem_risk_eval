@@ -9,7 +9,7 @@ mv = mapview::mapview
 sw = suppressWarnings
 sm = suppressMessages
 
-setwd('earthjustice/chem_risk_eval/')
+# setwd('earthjustice/chem_risk_eval/')
 
 ## 0 - setup ####
 
