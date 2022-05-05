@@ -9,6 +9,7 @@ library(mapview)
 library(viridis)
 library(ggplot2)
 library(scales)
+# library(VennDiagram)
 # library(magick)
 # library(htmlwidgets)
 # library(htmltools)
@@ -504,3 +505,45 @@ wlats %>%
           axis.title.y = element_text(hjust=0.3))
 
 ggsave('figs/plots/WLATS_concentrations.png', width = 8, height = 6)
+
+# venn diagram of chems by source ####
+
+#the VennDiagram package doesn't produce the kind of diagram we want,
+#so i made that in powerpoint. The code below does all the summarizing you
+#need to make a venn diagram yourself
+
+sources_by_chem = emissions %>%
+    left_join(select(cas, cas=CASRN_nohyphens, ej_name)) %>%
+    group_by(ej_name) %>%
+    summarize(ej_name = first(ej_name),
+              sources = list(unique(source)),
+              .groups = 'drop') %>%
+    as.data.frame() %>%
+    split(1:nrow(.))
+
+chem_list = lapply(sources_by_chem, function(x) as.list(x)$sources[[1]])
+names(chem_list) = sapply(sources_by_chem, function(x) as.list(x)$ej_name)
+
+# unq_chms = emissions %>%
+#     left_join(select(cas, cas=CASRN_nohyphens, ej_name)) %>%
+#     group_by(source) %>%
+#     summarize(source = first(source),
+#               chems = list(unique(ej_name)),
+#               .groups = 'drop') %>%
+#     as.data.frame() %>%
+#     split(1:nrow(.))
+#
+# chem_list = lapply(unq_chms, function(x) as.list(x)$chems[[1]])
+# names(chem_list) = sapply(unq_chms, function(x) as.list(x)$source)
+
+# allchems = Reduce(union, chem_list)
+
+# venn.diagram(
+#     x = chem_list,
+#     # category.names = c("Set 1" , "Set 2 " , "Set 3"),
+#     main = 'Chemicals reported by each source across target locations and time range',
+#     imagetype = 'png',
+#     filename = 'figs/plots/chem_venndiagram.png',
+#     output=TRUE,
+#     disable.logging = TRUE
+# )
