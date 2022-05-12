@@ -24,7 +24,7 @@ cities = read_csv('data/general/cities.csv', col_types=cols())
 for(i in seq_len(nrow(cas))){
 
     srs_id = cas$SRS_id[i]
-    print(paste0(Sys.time(), ' working on chem: ', srs_id, ' (', i, ' of ', nrow(cas), ')'))
+    print(paste0(Sys.time(), ' working on SRS ID: ', srs_id, ' (', i, ' of ', nrow(cas), ')'))
 
     #chemicals
     print(paste(Sys.time(), 'getting chem data'))
