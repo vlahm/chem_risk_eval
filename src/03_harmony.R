@@ -57,7 +57,7 @@ dmr = dmr %>%
     mutate(location_set_to_county_centroid = ifelse(is.na(lat), TRUE, FALSE),
            lat = ifelse(is.na(lat), cty_lat, lat),
            lon = ifelse(is.na(lon), cty_lon, lon)) %>%
-    select(-cty_lat, -cty_lon, -`FRS ID`) %>%
+    select(-cty_lat, -cty_lon) %>%
     mutate(source = 'DMR',
            illegal = FALSE)
 
@@ -199,7 +199,7 @@ npdes_loads = npdes_loads_concs %>%
            location_set_to_county_centroid = FALSE,
            illegal = TRUE) %>%
     select(year, state, county, cas, medium, load_kg, lat, lon,
-           location_set_to_county_centroid, source, illegal)
+           location_set_to_county_centroid, source, illegal, FRS_ID)
 
 npdes_concs = npdes_loads_concs %>%
     filter(STANDARD_UNIT_DESC == 'mg/L') %>%
@@ -218,7 +218,19 @@ npdes_concs = npdes_loads_concs %>%
            lat, lon,
            location_set_to_county_centroid, source, illegal)
 
+# correct DMR data to avoid double-counting of effluent exceedances also reported to NPDES ####
 
+multireports = npdes_loads %>%
+    left_join(dmr, by=c('year', 'state', 'county', 'cas', FRS_ID = 'FRS ID')) %>%
+    select(year, state, county, cas, FRS_ID,
+           multirp_amt = load_kg.x, dmr_total = load_kg.y) %>%
+    filter(! is.na(dmr_total)) %>%
+    select(-dmr_total)
+
+dmr = dmr %>%
+    left_join(multireports, by = c('year', 'state', 'county', 'cas', `FRS ID` = 'FRS_ID')) %>%
+    mutate(load_kg = ifelse(! is.na(multirp_amt), load_kg - multirp_amt, load_kg)) %>%
+    select(-multirp_amt, -`FRS ID`)
 
 # combine ####
 

@@ -13,6 +13,8 @@ sm = suppressMessages
 
 ## 0 - setup ####
 
+options(timeout = 1200)
+
 source('src/00_globals.R')
 
 cas = read_csv('data/general/target_substances.csv', col_types=cols())
@@ -308,6 +310,8 @@ write_csv(nei, 'data/nei/nei_joined.csv')
 
 ## 3 - DMR: REST service ####
 
+#excludes discharges that exceed permit limits. that's covered by NPDES below.
+
 dmr_fail = c()
 for(i in seq_len(nrow(cas))){
 
@@ -321,6 +325,7 @@ for(i in seq_len(nrow(cas))){
 
             query_base = 'https://echodata.epa.gov/echo/dmr_rest_services.get_custom_data_annual'
             cas_spec = paste0('?output=CSV&p_cas=', casrn)
+            # query_mid = '&p_est=Y&p_loads_data=DMR&p_nd=ZERO&p_nutrient_agg=N&p_param_group=N&p_exceed=N' #broken?
             query_mid = '&p_est=Y&p_loads_data=DMR&p_nd=ZERO&p_nutrient_agg=N&p_param_group=N'
             state_spec = paste0('&p_st=', stt)
             year_spec = paste0('&p_year=', yr)
