@@ -640,7 +640,9 @@ ej_heatmap = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE
     }
 }
 
-ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE, fileout, title, type = 'load'){
+ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE, fileout, title, type = 'load',
+                             plot_legend = TRUE, plot_title = TRUE, point_color = 'blue',
+                             plot_locations = TRUE){
 
     if(! type %in% c('load', 'rsei')) stop('type must be either "load" or "rsei"')
 
@@ -680,23 +682,39 @@ ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoint
 
     lgnd = ifelse(type == 'load', 'Cumulative Load (kg)', 'RSEI-weighted<br>Cumulative Load (kg)')
 
-    mapout = leaflet() %>%
-        addProviderTiles(providers$CartoDB.Positron) %>%
-        setView(lng = center[1],
-                lat = center[2],
-                zoom = scale) %>%
+    mapout = leaflet()
+
+    if(plot_locations){
+        mapout = addProviderTiles(mapout, providers$CartoDB.Positron)
+    } else {
+        mapout = addProviderTiles(mapout, providers$CartoDB.PositronNoLabels)
+    }
+
+    mapout = setView(mapout, lng = center[1], lat = center[2], zoom = scale) %>%
+        fitBounds(lat1 = latrange[1], lat2 = latrange[2], lng1 = lonrange[1], lng2 = lonrange[2]) %>%
         addCircleMarkers(lng = d$lon, lat = d$lat, radius = d$pointsize,
                    weight = 1,
-                   color = 'blue',
-                   fillColor = 'blue') %>%
-        addControl(paste0('<div class="info" style="font-size: 2em; background-color: rgba(245, 245, 220, 0.5)">', title, '</div>'),
-                   position = "topright", className="map-title") %>%
-        addLegendCustom(colors = rep('blue', length(scale_vals_scaled)),
-                  # values = scale_vals_scaled,
-                  sizes = scale_vals_scaled * 2,
-                  labels = scale_labs,
-                  title = lgnd,
-                  position = 'topright')
+                   color = point_color,
+                   fillColor = point_color)
+
+    if(plot_title){
+        mapout =  addControl(
+            mapout,
+            paste0('<div class="info" style="font-size: 2em; background-color: rgba(245, 245, 220, 0.5)">',
+                   title, '</div>'),
+            position = "topright", className="map-title")
+    }
+
+    if(plot_legend){
+        mapout = addLegendCustom(
+            mapout,
+            colors = rep(point_color, length(scale_vals_scaled)),
+            # values = scale_vals_scaled,
+            sizes = scale_vals_scaled * 2,
+            labels = scale_labs,
+            title = lgnd,
+            position = 'topright')
+    }
 
     if(grepl('\\.html$', fileout)){
         mapshot(mapout, url = fileout)

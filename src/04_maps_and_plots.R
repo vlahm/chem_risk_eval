@@ -547,3 +547,269 @@ names(chem_list) = sapply(sources_by_chem, function(x) as.list(x)$ej_name)
 #     output=TRUE,
 #     disable.logging = TRUE
 # )
+
+# emissions and RSEI maps. static, final v1. ####
+
+sources = list('TRI', c('DMR', 'NEI', 'NPDES'))
+
+for(loc in unique(emissions$target_location)){
+
+    dd = filter(emissions, target_location == loc)
+
+    if(loc == 'Houston'){
+        map_scale = 10
+    } else if(loc == 'Port Arthur'){
+        map_scale = 10
+    } else if(loc == 'Louisville'){
+        map_scale = 10
+    } else {
+        map_scale = 9
+    }
+
+    map_center = c(mean(dd$lon, na.rm=TRUE),
+                   mean(dd$lat, na.rm=TRUE))
+
+    expand = 0.02
+    latrange = range(dd$lat, na.rm = TRUE)
+    latrange[1] = latrange[1] - expand
+    latrange[2] = latrange[2] + expand
+    lonrange = range(dd$lon, na.rm = TRUE)
+    lonrange[1] = lonrange[1] - expand
+    lonrange[2] = lonrange[2] + expand
+
+    if(nrow(dd)){
+
+        for(src in sources){
+
+            ddfilt = filter(dd, source %in% !!src)
+
+            ddo = ddfilt %>%
+                group_by(lat, lon) %>%
+                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                          .groups = 'drop')
+
+            ej_map2_pointsize(
+                ddo, center = map_center, scale = map_scale, res = 1/60,
+                latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+                title = glue('{sr}, {lc}: Combined emissions across {nc} of 24 high-priority chemicals, 2010-22',
+                             sr = ifelse(src[[1]] == 'TRI', src, 'NEI+DMR+violations'),
+                             nc = length(unique(ddfilt$cas)), lc = loc),
+                fileout = glue('figs/plots/final_maps/{sr}_{lc}_load.png',
+                               sr = ifelse(src[[1]] == 'TRI', tolower(src), 'nei-dmr'),
+                               lc = gsub(' ', '_', tolower(loc))),
+                plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+            ddo_rsei_f = ddfilt %>%
+                left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
+                filter(! is.na(rsei_weight))
+
+            load_kg_rsei = ddo_rsei_f$load_kg * ddo_rsei_f$rsei_weight
+            ddo_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddo_rsei_f$load_kg)
+
+            ddo_rsei = ddo_rsei_f %>%
+                group_by(lat, lon) %>%
+                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                          .groups = 'drop')
+
+            if(nrow(ddo_rsei)){
+                ej_map2_pointsize(
+                    ddo_rsei, center = map_center, scale = map_scale, res = 1/60,
+                    latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+                    title = glue('{sr}, {lc}: RSEI-weighted emissions across {nc} of 24 high-priority chemicals, 2010-22',
+                                 sr = ifelse(src[[1]] == 'TRI', src, 'NEI+DMR+violations'),
+                                 nc = length(unique(ddo_rsei_f$cas)), lc = loc),
+                    fileout = glue('figs/plots/final_maps/{sr}_{lc}_rsei.png',
+                                   sr = ifelse(src[[1]] == 'TRI', tolower(src), 'nei-dmr'),
+                                   lc = gsub(' ', '_', tolower(loc))),
+                    type = 'rsei', plot_locations = FALSE,
+                    plot_legend = FALSE, plot_title = FALSE, point_color = 'green')
+            }
+        }
+    }
+}
+
+# list.files('figs/load_maps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
+#     image_read() %>% # reads each path file
+#     image_join() %>% # joins image
+#     image_animate(fps=4) %>% # animates, can opt for number of loops
+#     image_write("FileName.gif") # write to current dir
+
+
+# list.files('figs/load_maps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
+#     image_read() %>% # reads each path file
+#     image_join() %>% # joins image
+#     image_animate(fps=4) %>% # animates, can opt for number of loops
+#     image_write("FileName.gif") # write to current dir
+
+# emissions maps. static, final v2-3. ####
+
+# sources = list('TRI', c('DMR', 'NEI', 'NPDES'))
+
+for(loc in unique(emissions$target_location)){
+
+    dd = filter(emissions, target_location == loc)
+
+    if(loc == 'Houston'){
+        map_scale = 10
+    } else if(loc == 'Port Arthur'){
+        map_scale = 10
+    } else if(loc == 'Louisville'){
+        map_scale = 10
+    } else {
+        map_scale = 9
+    }
+
+    map_center = c(mean(dd$lon, na.rm=TRUE),
+                   mean(dd$lat, na.rm=TRUE))
+
+    expand = 0.02
+    latrange = range(dd$lat, na.rm = TRUE)
+    latrange[1] = latrange[1] - expand
+    latrange[2] = latrange[2] + expand
+    lonrange = range(dd$lon, na.rm = TRUE)
+    lonrange[1] = lonrange[1] - expand
+    lonrange[2] = lonrange[2] + expand
+
+    #tri-only
+    src = 'TRI'
+    ddfilt = filter(dd, source %in% !!src)
+
+    tri_cas = unique(ddfilt$cas)
+    tri_chem = filter(cas, CASRN_nohyphens %in% tri_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(tri_cas),
+    #            chm = paste(tri_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(tri_cas)))
+    write_lines(tri_chem,
+                glue('figs/plots/final_map_chemlists/tri_only_{lc}.txt',
+                     lc = sub(' ', '_', tolower(loc))))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                  .groups = 'drop')
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'blue',
+        fileout = glue('figs/plots/final_maps/tri_{lc}_trichems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #nei+dmr: tri chems
+    src = c('DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+    ddfilt = filter(dd, cas %in% tri_cas)
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                  .groups = 'drop')
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'blue',
+        fileout = glue('figs/plots/final_maps/dmr_nei_{lc}_trichems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #nei+dmr: non-tri chems
+    src = c('DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+    ddfilt = filter(dd, ! cas %in% tri_cas)
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+    write_lines(unique_chem,
+                glue('figs/plots/final_map_chemlists/non-tri_{lc}.txt',
+                     lc = sub(' ', '_', tolower(loc))))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                  .groups = 'drop')
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'red',
+        fileout = glue('figs/plots/final_maps/dmr_nei_{lc}_nontrichems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #nei+dmr: all chems
+    src = c('DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                  .groups = 'drop')
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'purple',
+        fileout = glue('figs/plots/final_maps/dmr_nei_{lc}_allchems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #all sources, all chems
+    src = c('TRI', 'DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                  .groups = 'drop')
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'purple',
+        fileout = glue('figs/plots/final_maps/tri_dmr_nei_{lc}_allchems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+}
+
+# gifs? ####
+
+# list.files('figs/load_maps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
+#     image_read() %>% # reads each path file
+#     image_join() %>% # joins image
+#     image_animate(fps=4) %>% # animates, can opt for number of loops
+#     image_write("FileName.gif") # write to current dir
+
+
+# list.files('figs/load_maps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
+#     image_read() %>% # reads each path file
+#     image_join() %>% # joins image
+#     image_animate(fps=4) %>% # animates, can opt for number of loops
+#     image_write("FileName.gif") # write to current dir
