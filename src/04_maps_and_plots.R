@@ -345,6 +345,7 @@ emissions %>%
 ## stacked bars for combined emissions
 
 emissions %>%
+    mutate(source = ifelse(source == 'NPDES', 'DMR', source)) %>%
     rename(Source = source) %>%
     # filter(county %in% houston_counties) %>%
     group_by(year, Source, target_location) %>%
@@ -393,6 +394,7 @@ ggsave('figs/plots/illegal_emissions.png', width = 8, height = 4)
 ## bars for DMR
 
 emissions %>%
+    mutate(source = ifelse(source == 'NPDES', 'DMR', source)) %>%
     filter(source == 'DMR') %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
     mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
