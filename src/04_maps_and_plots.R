@@ -801,6 +801,57 @@ for(loc in unique(emissions$target_location)){
         plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
 }
 
+# some quick numbers ####
+
+#tri chems by location
+tri_chems = emissions %>%
+    filter(source == 'TRI') %>%
+    group_by(target_location) %>%
+    summarize(cas = unique(cas)) %>%
+    ungroup() %>%
+    mutate(indicator = 1)
+
+#tri load by location
+emissions %>%
+    filter(source == 'TRI') %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    group_by(target_location) %>%
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+
+#non-tri load by location
+emissions %>%
+    filter(source != 'TRI') %>%
+    left_join(tri_chems, by = c('target_location', 'cas')) %>%
+    filter(! is.na(indicator)) %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    group_by(target_location) %>%
+    # filter(cas %in% filter(tri_chems, target_location
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+
+#port arthur formaldehyde
+emissions %>%
+    filter(source != 'TRI',
+           cas == 50000,
+           target_location == 'Port Arthur') %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    summarize(load_lb = sum(load_lb))
+
+#tri facility counts
+emissions %>%
+    filter(source == 'TRI') %>%
+    group_by(target_location) %>%
+    summarize(n = n()) %>%
+    ungroup()
+
+#non-tri facility counts
+emissions %>%
+    filter(source != 'TRI') %>%
+    group_by(target_location) %>%
+    summarize(n = n()) %>%
+    ungroup()
+
 # gifs? ####
 
 # list.files('figs/load_maps/by_chem/by_year/...', pattern = '*.png', full.names = TRUE) %>%
