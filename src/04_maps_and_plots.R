@@ -647,6 +647,8 @@ for(loc in unique(emissions$target_location)){
 
 # sources = list('TRI', c('DMR', 'NEI', 'NPDES'))
 
+file.create('figs/plots/facility_counts.txt')
+
 for(loc in unique(emissions$target_location)){
 
     dd = filter(emissions, target_location == loc)
@@ -691,6 +693,9 @@ for(loc in unique(emissions$target_location)){
         summarize(load_kg = sum(load_kg, na.rm = TRUE),
                   .groups = 'drop')
 
+    write_lines(glue('{loc}, TRI, TRI chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts.txt'), append = TRUE)
+
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
@@ -715,6 +720,9 @@ for(loc in unique(emissions$target_location)){
         group_by(lat, lon) %>%
         summarize(load_kg = sum(load_kg, na.rm = TRUE),
                   .groups = 'drop')
+
+    write_lines(glue('{loc}, DMR+NEI, TRI chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts.txt'), append = TRUE)
 
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
@@ -744,6 +752,9 @@ for(loc in unique(emissions$target_location)){
         summarize(load_kg = sum(load_kg, na.rm = TRUE),
                   .groups = 'drop')
 
+    write_lines(glue('{loc}, DMR+NEI, non-TRI chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts.txt'), append = TRUE)
+
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
@@ -768,6 +779,9 @@ for(loc in unique(emissions$target_location)){
         summarize(load_kg = sum(load_kg, na.rm = TRUE),
                   .groups = 'drop')
 
+    write_lines(glue('{loc}, DMR+NEI, all chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts.txt'), append = TRUE)
+
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
@@ -791,6 +805,9 @@ for(loc in unique(emissions$target_location)){
         group_by(lat, lon) %>%
         summarize(load_kg = sum(load_kg, na.rm = TRUE),
                   .groups = 'drop')
+
+    write_lines(glue('{loc}, TRI+DMR+NEI, all chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts.txt'), append = TRUE)
 
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
