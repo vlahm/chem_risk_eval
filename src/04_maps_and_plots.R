@@ -858,6 +858,7 @@ emissions %>%
 #tri facility counts
 emissions %>%
     filter(source == 'TRI') %>%
+    distinct(target_location, lat, lon) %>%
     group_by(target_location) %>%
     summarize(n = n()) %>%
     ungroup()
@@ -865,6 +866,7 @@ emissions %>%
 #non-tri facility counts
 emissions %>%
     filter(source != 'TRI') %>%
+    distinct(target_location, lat, lon) %>%
     group_by(target_location) %>%
     summarize(n = n()) %>%
     ungroup()

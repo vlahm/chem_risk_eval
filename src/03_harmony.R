@@ -110,6 +110,15 @@ nei = nei %>%
     mutate(source = 'NEI',
            illegal = FALSE)
 
+nei %>%
+    filter(state == 'LA') %>%
+    distinct(EIS_FACILITY_ID) %>%
+    write_csv('../stewi_comparison/nei_facilities_canceralley.csv')
+
+nei %>%
+    filter(state == 'LA', year == 2017, cas=='75343') %>%
+    summarize(load_kg = sum(load_kg))
+
 # nei %>%
 #     group_by(cas, year) %>%
 #     summarize(load_kg = mean(load_kg))
@@ -154,6 +163,10 @@ tri = tri %>%
     select(-cty_lat, -cty_lon) %>%
     mutate(source = 'TRI',
            illegal = FALSE)
+
+# write_csv(filter(tri, state=='LA') %>% select(TRI_FACILITY_ID), '../stewi_comparison/tri_facilities_canceralley.csv')
+
+filter(tri, state=='LA', year == '2017') %>% summarize(sumkg = sum(load_kg, na.rm=T))
 
 # tri %>%
 #     # filter(state == 'KY', county == 'JEFFERSON') %>%
