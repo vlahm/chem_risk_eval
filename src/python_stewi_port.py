@@ -3,15 +3,18 @@ import pandas as pd
 import numpy as np
 import facilitymatcher
 import re
+from pathlib import Path
 
-cities = pd.read_csv('/home/mike/git/earthjustice/chem_risk_eval/data/general/cities.csv',
+wd = '/home/mike/git/earthjustice/chem_risk_eval/data'
+
+cities = pd.read_csv(Path(wd, 'general/cities.csv'),
                      dtype = {'EIS_FACILITY_ID': str})
 
-chems = pd.read_csv('/home/mike/git/earthjustice/chem_risk_eval/data/general/target_substances.csv',
+chems = pd.read_csv(Path(wd, 'general/target_substances.csv'),
                     dtype = {'EIS_FACILITY_ID': str})
 
-fac_ids = pd.read_csv('/home/mike/git/earthjustice/stewi_comparison/nei_facilities_canceralley.csv',
-                      dtype = {'EIS_FACILITY_ID': str})
+# fac_ids = pd.read_csv('/home/mike/git/earthjustice/stewi_comparison/nei_facilities_canceralley.csv',
+#                       dtype = {'EIS_FACILITY_ID': str})
 
 def clean_county_names(x):
 
@@ -71,7 +74,9 @@ for source in sources:
         d = d.dropna(subset=['load_kg'])
         source_d = source_d.append(d, ignore_index=True)
 
+    src = source.lower()
 
+    source_d.to_csv(Path(wd, src, src + '_joined2.csv'))
 # nei['load_kg'].isnull().sum()
 # nei['load_kg'].notnull().sum()
 
