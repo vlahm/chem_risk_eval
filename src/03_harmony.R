@@ -32,7 +32,7 @@ county_centroids = cities %>%
     select(state, county, cty_lat = lat, cty_lon = lon) %>%
     mutate(county = clean_county_names(county))
 
-# harmonize DMR data ####
+# harmonize DMR data (custom way) ####
 
 dmr = map_dfr(list.files('data/dmr', full.names = TRUE),
              read_csv, col_types = cols(.default = 'c'))
@@ -84,7 +84,7 @@ dmr = dmr %>%
 # d = d[rep(row.names(d), times = d$row_dupe_factor), ]
 
 
-# harmonize NEI data ####
+# harmonize NEI data (custom way) ####
 
 nei = read_csv('data/nei/nei_joined.csv', col_types = cols(.default = 'c'))
 
@@ -123,7 +123,7 @@ nei %>%
 #     group_by(cas, year) %>%
 #     summarize(load_kg = mean(load_kg))
 
-# harmonize TRI data ####
+# harmonize TRI data (custom way) ####
 
 tri = map_dfr(list.files('data/tri/raw/', full.names = TRUE),
               read_csv, col_types = cols(.default = 'c'))
@@ -231,6 +231,21 @@ npdes_concs = npdes_loads_concs %>%
            lat, lon,
            location_set_to_county_centroid, source, illegal)
 
+# load DMR, NEI, TRI data (retrieved via stewi) ####
+
+dmr = read_csv('data/stewi_data/dmr_joined2.csv') %>%
+    select(-`...1`) %>%
+    mutate(cas = gsub('-', '', cas),
+           `FRS ID` = as.character(`FRS ID`))
+
+nei = read_csv('data/stewi_data/nei_joined2.csv') %>%
+    select(-`...1`) %>%
+    mutate(cas = gsub('-', '', cas))
+
+tri = read_csv('data/stewi_data/tri_joined2.csv') %>%
+    select(-`...1`) %>%
+    mutate(cas = gsub('-', '', cas))
+
 # correct DMR data to avoid double-counting of effluent exceedances also reported to NPDES ####
 
 multireports = npdes_loads %>%
@@ -283,5 +298,6 @@ out_avg_load_distributed = out %>%
 #     group_by(year, cas, medium, source) %>%
 #     summarize(l = sum(load_kg))
 
-write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')
-write_csv(out_avg_load_distributed, 'data/emissions_harmonized_excess_distributed_evenly_2010-22.csv')
+write_csv(out, 'data/emissions_harmonized_epamethod_2010-22.csv')
+# write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')
+# write_csv(out_avg_load_distributed, 'data/emissions_harmonized_excess_distributed_evenly_2010-22.csv')
