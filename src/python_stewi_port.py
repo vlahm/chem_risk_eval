@@ -95,7 +95,8 @@ for source in sources:
 
         if source == 'DMR':
             frs_ids = get_matches_for_id_list('DMR', facilities['FacilityID'])
-            facilities = facilities.merge(frs_ids[['FRS_ID', 'FacilityID']], on='FacilityID')\
+            facilities = facilities.merge(frs_ids[['FRS_ID', 'FacilityID']],
+                                          on='FacilityID', how='left')\
                 .rename(columns={'FRS_ID': 'FRS ID'})
 
         d = facilities.merge(d, how='left', on='FacilityID')
@@ -140,32 +141,44 @@ for source in sources:
             continue
 
     frs_ids = get_matches_for_id_list(source, src_facils['FacilityID'])
-    src_facils = src_facils.merge(frs_ids[['FRS_ID', 'FacilityID']], on='FacilityID')\
+    src_facils = src_facils.merge(frs_ids[['FRS_ID', 'FacilityID']],
+                                  on='FacilityID', how='left')\
         .rename(columns={'FRS_ID': 'FRS ID'})
 
     facils = pd.concat([facils, src_facils], axis=0, ignore_index=True)\
         .drop_duplicates()
 
+cmb = list()
+cmb.append(combineFullInventories({'TRI':2010}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2011, 'NEI':2011}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2012, 'NEI':2012}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2013, 'NEI':2013}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2014, 'NEI':2014, 'DMR':2014}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2015, 'NEI':2015, 'DMR':2015}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2016, 'NEI':2016, 'DMR':2016}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2017, 'NEI':2017, 'DMR':2017}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2018, 'NEI':2018, 'DMR':2018}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2019, 'DMR':2019}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2020, 'DMR':2020}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'DMR':2021}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'DMR':2022}, filter_for_LCI = False))
 
-cmb1 = combineFullInventories({'TRI':2010}, filter_for_LCI = False)
-cmb2 = combineFullInventories({'TRI':2011, 'NEI':2011}, filter_for_LCI = False)
-cmb3 = combineFullInventories({'TRI':2012, 'NEI':2012}, filter_for_LCI = False)
-cmb4 = combineFullInventories({'TRI':2013, 'NEI':2013}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'TRI':2014, 'NEI':2014, 'DMR':2014}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'TRI':2015, 'NEI':2015, 'DMR':2015}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'TRI':2016, 'NEI':2016, 'DMR':2016}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'TRI':2017, 'NEI':2017, 'DMR':2017}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'TRI':2018, 'NEI':2018, 'DMR':2018}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'TRI':2019, 'DMR':2019}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'TRI':2020, 'DMR':2020}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'DMR':2021}, filter_for_LCI = False)
-cmb5 = combineFullInventories({'DMR':2022}, filter_for_LCI = False)
-    # cmb = combineFullInventories({"TRI":"2010","TRI":"2011","TRI":"2012","TRI":"2013","TRI":"2014","TRI":"2015","TRI":"2016","TRI":"2017","TRI":"2018","TRI":"2019","TRI":"2020",
-    #                               "NEI":"2011","NEI":"2012","NEI":"2013","NEI":"2014","NEI":"2015","NEI":"2016","NEI":"2017","NEI":"2018",
-    #                               "DMR":"2014","DMR":"2015","DMR":"2016","DMR":"2017","DMR":"2018","DMR":"2019","DMR":"2020","DMR":"2021","DMR":"2022"},
-    #                              filter_for_LCI = False)
+cmb = pd.concat(cmb, axis=0)
+cmb = cmb.merge(facils[['FacilityID', 'FRS ID', 'NAICS', 'City', 'County', 'State', 'Latitude', 'Longitude']],
+                how='right', on='FacilityID')\
+    .rename(columns={'State': 'state', 'County': 'county', 'SRS_CAS': 'cas',
+                     'Compartment': 'medium', 'FlowAmount': 'load_kg',
+                     'Latitude': 'lat', 'Longitude': 'lon',
+                     'Source': 'source', 'Year': 'year', 'FRS ID': 'frs_id'})\
+    .dropna(subset=['load_kg'])
+cmb['illegal'] = False
+cmb['location_set_to_county_centroid'] = False
 
+cmb = cmb[['year', 'state', 'county', 'cas', 'frs_id', 'medium', 'load_kg', 'lat', 'lon', 'location_set_to_county_centroid', 'source', 'illegal']]
 
+cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_joined2.csv'), index=False)
+cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_joined2.csv'), index=False)
+cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined2.csv'), index=False)
 
 # fac_ids = pd.read_csv('/home/mike/git/earthjustice/stewi_comparison/tri_facilities_canceralley.csv',
 #                       dtype = {'TRI_FACILITY_ID': str})
