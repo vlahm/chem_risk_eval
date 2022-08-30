@@ -12,6 +12,8 @@ wd = '/home/mike/git/earthjustice/chem_risk_eval/data'
 
 cities = pd.read_csv(Path(wd, 'general/cities.csv'),
                      dtype = {'EIS_FACILITY_ID': str})
+tx_counties = cities[cities['state'] == 'TX']['county'].tolist()
+la_parishes = cities[cities['state'] == 'LA']['county'].tolist()
 
 chems = pd.read_csv(Path(wd, 'general/target_substances.csv'),
                     dtype = {'EIS_FACILITY_ID': str})
@@ -38,7 +40,7 @@ def clean_county_names(x):
 years = list(range(2010, 2023))
 sources = ['NEI', 'TRI', 'DMR']
 #----#
-# source = 'DMR'; year = 2017
+# source = 'TRI'; year = 2017
 for source in sources:
 
     source_d = pd.DataFrame()
@@ -60,6 +62,7 @@ for source in sources:
         elif source == 'TRI':
             casrns = [str(x) for x in chems['CASRN'].tolist()]
             chems_included = flows[flows['CAS'].isin(casrns)]['FlowName'].tolist()
+            flows.rename(columns={'FlowID':'CASRN'}, inplace=True)
         else: #DMR
             flows = flows.drop(['CAS'], axis=1)\
                 .merge(chem_synonyms[['CAS', source]], how='left',
@@ -86,8 +89,6 @@ for source in sources:
 
         facilities = stewi.getInventoryFacilities(source, year)
         facilities = facilities.assign(County = lambda df: df['County'].map(lambda x: clean_county_names(x)))
-        tx_counties = cities[cities['state'] == 'TX']['county'].tolist()
-        la_parishes = cities[cities['state'] == 'LA']['county'].tolist()
         facilities = facilities.query('((State == "KY") & (County == "JEFFERSON")) |' +\
                                       '((State == "TX") & (County in @tx_counties)) |' +\
                                       '((State == "LA") & (County in @la_parishes))')
@@ -118,8 +119,53 @@ for source in sources:
 # nei['load_kg'].notnull().sum()
 # source_d['year'].unique()
 
+facils = pd.DataFrame()
+for source in sources:
 
-y2014 = combineFullInventories({"TRI":"2014","NEI":"2014","DMR":"2014"})
+    src_facils = pd.DataFrame()
+
+    for year in years:
+
+        try:
+            yr_facils = stewi.getInventoryFacilities(source, year)\
+                .assign(County = lambda df: df['County'].map(lambda x: clean_county_names(x)))\
+                .query('((State == "KY") & (County == "JEFFERSON")) |' +\
+                       '((State == "TX") & (County in @tx_counties)) |' +\
+                       '((State == "LA") & (County in @la_parishes))')
+
+            src_facils = pd.concat([src_facils, yr_facils], axis=0, ignore_index=True)\
+                .drop_duplicates()
+
+        except:
+            continue
+
+    frs_ids = get_matches_for_id_list(source, src_facils['FacilityID'])
+    src_facils = src_facils.merge(frs_ids[['FRS_ID', 'FacilityID']], on='FacilityID')\
+        .rename(columns={'FRS_ID': 'FRS ID'})
+
+    facils = pd.concat([facils, src_facils], axis=0, ignore_index=True)\
+        .drop_duplicates()
+
+
+cmb1 = combineFullInventories({'TRI':2010}, filter_for_LCI = False)
+cmb2 = combineFullInventories({'TRI':2011, 'NEI':2011}, filter_for_LCI = False)
+cmb3 = combineFullInventories({'TRI':2012, 'NEI':2012}, filter_for_LCI = False)
+cmb4 = combineFullInventories({'TRI':2013, 'NEI':2013}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'TRI':2014, 'NEI':2014, 'DMR':2014}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'TRI':2015, 'NEI':2015, 'DMR':2015}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'TRI':2016, 'NEI':2016, 'DMR':2016}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'TRI':2017, 'NEI':2017, 'DMR':2017}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'TRI':2018, 'NEI':2018, 'DMR':2018}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'TRI':2019, 'DMR':2019}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'TRI':2020, 'DMR':2020}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'DMR':2021}, filter_for_LCI = False)
+cmb5 = combineFullInventories({'DMR':2022}, filter_for_LCI = False)
+    # cmb = combineFullInventories({"TRI":"2010","TRI":"2011","TRI":"2012","TRI":"2013","TRI":"2014","TRI":"2015","TRI":"2016","TRI":"2017","TRI":"2018","TRI":"2019","TRI":"2020",
+    #                               "NEI":"2011","NEI":"2012","NEI":"2013","NEI":"2014","NEI":"2015","NEI":"2016","NEI":"2017","NEI":"2018",
+    #                               "DMR":"2014","DMR":"2015","DMR":"2016","DMR":"2017","DMR":"2018","DMR":"2019","DMR":"2020","DMR":"2021","DMR":"2022"},
+    #                              filter_for_LCI = False)
+
+
 
 # fac_ids = pd.read_csv('/home/mike/git/earthjustice/stewi_comparison/tri_facilities_canceralley.csv',
 #                       dtype = {'TRI_FACILITY_ID': str})
