@@ -32,7 +32,7 @@ county_centroids = cities %>%
     select(state, county, cty_lat = lat, cty_lon = lon) %>%
     mutate(county = clean_county_names(county))
 
-# harmonize DMR data (custom way) ####
+# harmonize DMR data (custom way; OBSOLETE) ####
 
 dmr = map_dfr(list.files('data/dmr', full.names = TRUE),
              read_csv, col_types = cols(.default = 'c'))
@@ -84,7 +84,7 @@ dmr = dmr %>%
 # d = d[rep(row.names(d), times = d$row_dupe_factor), ]
 
 
-# harmonize NEI data (custom way) ####
+# harmonize NEI data (custom way; OBSOLETE) ####
 
 nei = read_csv('data/nei/nei_joined.csv', col_types = cols(.default = 'c'))
 
@@ -123,7 +123,7 @@ nei %>%
 #     group_by(cas, year) %>%
 #     summarize(load_kg = mean(load_kg))
 
-# harmonize TRI data (custom way) ####
+# harmonize TRI data (custom way; OBSOLETE) ####
 
 tri = map_dfr(list.files('data/tri/raw/', full.names = TRUE),
               read_csv, col_types = cols(.default = 'c'))
@@ -233,32 +233,34 @@ npdes_concs = npdes_loads_concs %>%
 
 # load DMR, NEI, TRI data (retrieved via stewi) ####
 
-dmr = read_csv('data/stewi_data/dmr_joined2.csv') %>%
-    select(-`...1`) %>%
+dmr = read_csv('data/stewi_data_dmr_joined2.csv') %>%
     mutate(cas = gsub('-', '', cas),
-           `FRS ID` = as.character(`FRS ID`))
+           frs_id = as.character(frs_id))
 
-nei = read_csv('data/stewi_data/nei_joined2.csv') %>%
-    select(-`...1`) %>%
-    mutate(cas = gsub('-', '', cas))
+nei = read_csv('data/stewi_data_nei_joined2.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
 
-tri = read_csv('data/stewi_data/tri_joined2.csv') %>%
-    select(-`...1`) %>%
-    mutate(cas = gsub('-', '', cas))
+tri = read_csv('data/stewi_data_tri_joined2.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+npdes_loads = rename(npdes_loads, frs_id = FRS_ID)
 
 # correct DMR data to avoid double-counting of effluent exceedances also reported to NPDES ####
 
-multireports = npdes_loads %>%
-    left_join(dmr, by=c('year', 'state', 'county', 'cas', FRS_ID = 'FRS ID')) %>%
-    select(year, state, county, cas, FRS_ID,
-           multirp_amt = load_kg.x, dmr_total = load_kg.y) %>%
-    filter(! is.na(dmr_total)) %>%
-    select(-dmr_total)
+# multireports = npdes_loads %>%
+#     rename(frs_id = FRS_ID) %>%
+#     left_join(dmr, by=c('year', 'state', 'county', 'cas', 'frs_id')) %>%
+#     select(year, state, county, cas, frs_id,
+#            multirp_amt = load_kg.x, dmr_total = load_kg.y) %>%
+#     filter(! is.na(dmr_total)) %>%
+#     select(-dmr_total)
 
-dmr = dmr %>%
-    left_join(multireports, by = c('year', 'state', 'county', 'cas', `FRS ID` = 'FRS_ID')) %>%
-    mutate(load_kg = ifelse(! is.na(multirp_amt), load_kg - multirp_amt, load_kg)) %>%
-    select(-multirp_amt, -`FRS ID`)
+# dmr = dmr %>%
+#     left_join(multireports, by = c('year', 'state', 'county', 'cas', 'frs_id')) %>%
+#     mutate(load_kg = ifelse(! is.na(multirp_amt), load_kg - multirp_amt, load_kg)) %>%
+#     select(-multirp_amt)
 
 # combine ####
 
@@ -268,35 +270,28 @@ out = bind_rows(dmr, nei) %>%
     mutate(target_location = case_when(state == 'LA' ~ 'Cancer Alley',
                                        state == 'KY' ~ 'Louisville',
                                        county %in% houston_counties ~ 'Houston',
-                                       TRUE ~ 'Port Arthur'))
+                                       TRUE ~ 'Port Arthur')) %>%
+    distinct(year, state, county, cas, medium, frs_id, source,
+             .keep_all = TRUE)
 
-# any(duplicated(select(out, year, state, county, cas, medium, lat, lon, source)))
+# duplicated(select(out, year, state, county, cas, medium, lat, lon, source))
 
-excess = out %>%
-    filter(location_set_to_county_centroid) %>%
-    group_by(year, target_location, cas, medium, source) %>%
-    # group_by(year, state, county, cas, medium, source) %>%
-    summarize(load_kg_excess = sum(load_kg),
-              .groups = 'drop')
-
-out_avg_load_distributed = out %>%
-    filter(! location_set_to_county_centroid) %>%
-    group_by(year, target_location, cas, medium, source) %>%
-    # group_by(year, state, county, cas, medium, source) %>%
-    mutate(n = n()) %>%
-    left_join(excess) %>%
-    mutate(
-        load_kg_excess = ifelse(is.na(load_kg_excess), 0, load_kg_excess),
-        load_kg = load_kg + (load_kg_excess / n)) %>%
-    ungroup() %>%
-    select(-location_set_to_county_centroid, -n, -load_kg_excess)
-
-# filter(out, year == 2010, target_location == 'Cancer Alley', cas == '107062', source == 'TRI') %>%
-#     group_by(year, cas, medium, source) %>%
-#     summarize(l = sum(load_kg))
-# filter(out_avg_load_distributed, year == 2010, target_location == 'Cancer Alley', cas == '107062', source == 'TRI') %>%
-#     group_by(year, cas, medium, source) %>%
-#     summarize(l = sum(load_kg))
+# excess = out %>%
+#     filter(location_set_to_county_centroid) %>%
+#     group_by(year, target_location, cas, medium, source) %>%
+#     summarize(load_kg_excess = sum(load_kg),
+#               .groups = 'drop')
+#
+# out_avg_load_distributed = out %>%
+#     filter(! location_set_to_county_centroid) %>%
+#     group_by(year, target_location, cas, medium, source) %>%
+#     mutate(n = n()) %>%
+#     left_join(excess) %>%
+#     mutate(
+#         load_kg_excess = ifelse(is.na(load_kg_excess), 0, load_kg_excess),
+#         load_kg = load_kg + (load_kg_excess / n)) %>%
+#     ungroup() %>%
+#     select(-location_set_to_county_centroid, -n, -load_kg_excess)
 
 write_csv(out, 'data/emissions_harmonized_epamethod_2010-22.csv')
 # write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')

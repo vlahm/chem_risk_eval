@@ -22,9 +22,6 @@ chems['CASRN_nohyphens'] = chems['CASRN_nohyphens'].map(lambda x: str(x))
 ej_cas = [str(x) for x in chems['CASRN'].tolist()]
 chem_synonyms = get_program_synomyms_for_CAS_list(ej_cas, ['TRI', 'NEI', 'DMR'])
 
-# fac_ids = pd.read_csv('/home/mike/git/earthjustice/stewi_comparison/nei_facilities_canceralley.csv',
-#                       dtype = {'EIS_FACILITY_ID': str})
-
 def clean_county_names(x):
 
     x = x.upper()
@@ -36,90 +33,10 @@ def clean_county_names(x):
 
     return(x)
 
-# years = [str(x) for x in range(2010, 2023)]
 years = list(range(2010, 2023))
 sources = ['NEI', 'TRI', 'DMR']
 #----#
 # source = 'TRI'; year = 2017
-for source in sources:
-
-    source_d = pd.DataFrame()
-
-    for year in years:
-
-        print(source + ', ' + str(year))
-        try:
-            d = stewi.getInventory(source, year, US_States_Only = True)
-        except:
-            continue
-
-        flows = stewi.getInventoryFlows(source, year)
-
-        if source == 'NEI':
-            casrns = [str(x) for x in chems['CASRN_nohyphens'].tolist()]
-            chems_included = flows[flows['FlowID'].isin(casrns)]['FlowName'].tolist()
-            flows.rename(columns={'FlowID':'CASRN'}, inplace=True)
-        elif source == 'TRI':
-            casrns = [str(x) for x in chems['CASRN'].tolist()]
-            chems_included = flows[flows['CAS'].isin(casrns)]['FlowName'].tolist()
-            flows.rename(columns={'FlowID':'CASRN'}, inplace=True)
-        else: #DMR
-            flows = flows.drop(['CAS'], axis=1)\
-                .merge(chem_synonyms[['CAS', source]], how='left',
-                       left_on='FlowName', right_on=source)\
-                .dropna(how='all', subset=['CAS', 'DMR'])\
-                .drop([source], axis=1)\
-                .rename(columns={'CAS': 'CASRN'})
-            casrns = [str(x) for x in chems['CASRN'].tolist()]
-            chems_included = flows[flows['CASRN'].isin(casrns)]['FlowName'].tolist()
-
-        # src_chemnames = chem_synonyms[source][chem_synonyms[source].notnull()]
-        # chems_included = flows[flows['FlowName'].isin(src_chemnames)]['FlowName'].tolist()
-
-        d = d.query('FlowName in @chems_included')
-        # flows.rename(columns={'FlowID':'CASRN'}, inplace=True)
-        d = d.merge(flows[['CASRN', 'FlowName']], how='left', on='FlowName')
-
-        if source == 'NEI':
-            d = d.merge(chems[['CASRN', 'CASRN_nohyphens', 'ej_name']], how='left', left_on='CASRN', right_on='CASRN_nohyphens')
-            d = d.drop(['CASRN_x'], axis=1)
-            d.rename(columns={'CASRN_y': 'CASRN'}, inplace=True)
-        else:
-            d = d.merge(chems[['CASRN', 'CASRN_nohyphens', 'ej_name']], how='left', left_on='CASRN', right_on='CASRN')
-
-        facilities = stewi.getInventoryFacilities(source, year)
-        facilities = facilities.assign(County = lambda df: df['County'].map(lambda x: clean_county_names(x)))
-        facilities = facilities.query('((State == "KY") & (County == "JEFFERSON")) |' +\
-                                      '((State == "TX") & (County in @tx_counties)) |' +\
-                                      '((State == "LA") & (County in @la_parishes))')
-
-        if source == 'DMR':
-            frs_ids = get_matches_for_id_list('DMR', facilities['FacilityID'])
-            facilities = facilities.merge(frs_ids[['FRS_ID', 'FacilityID']],
-                                          on='FacilityID', how='left')\
-                .rename(columns={'FRS_ID': 'FRS ID'})
-
-        d = facilities.merge(d, how='left', on='FacilityID')
-        d = d.rename(columns={'State': 'state', 'County': 'county', 'CASRN': 'cas', 'Compartment': 'medium', 'FlowAmount': 'load_kg', 'Latitude': 'lat', 'Longitude': 'lon'})
-        d['year'] = year
-        d['source'] = source
-        d['illegal'] = False
-        d['location_set_to_county_centroid'] = False
-
-        if source == 'DMR':
-            d = d[['year', 'state', 'county', 'cas', 'FRS ID', 'medium', 'load_kg', 'lat', 'lon', 'location_set_to_county_centroid', 'source', 'illegal']]
-        else:
-            d = d[['year', 'state', 'county', 'cas', 'medium', 'load_kg', 'lat', 'lon', 'location_set_to_county_centroid', 'source', 'illegal']]
-        d = d.dropna(subset=['load_kg'])
-        source_d = source_d.append(d, ignore_index=True)
-
-    src = source.lower()
-
-    source_d.to_csv(Path(wd, 'stewi_data', src + '_joined2.csv'))
-# nei['load_kg'].isnull().sum()
-# nei['load_kg'].notnull().sum()
-# source_d['year'].unique()
-
 facils = pd.DataFrame()
 for source in sources:
 
@@ -163,6 +80,8 @@ cmb.append(combineFullInventories({'TRI':2020, 'DMR':2020}, filter_for_LCI = Fal
 cmb.append(combineFullInventories({'DMR':2021}, filter_for_LCI = False))
 cmb.append(combineFullInventories({'DMR':2022}, filter_for_LCI = False))
 
+# cmb = pd.concat([cmb1, cmb2, cmb3, cmb4, cmb5, cmb6, cmb7, cmb8, cmb9, cmb10, cmb11, cmb12, cmb13], axis=0)
+
 cmb = pd.concat(cmb, axis=0)
 cmb = cmb.merge(facils[['FacilityID', 'FRS ID', 'NAICS', 'City', 'County', 'State', 'Latitude', 'Longitude']],
                 how='right', on='FacilityID')\
@@ -176,28 +95,90 @@ cmb['location_set_to_county_centroid'] = False
 
 cmb = cmb[['year', 'state', 'county', 'cas', 'frs_id', 'medium', 'load_kg', 'lat', 'lon', 'location_set_to_county_centroid', 'source', 'illegal']]
 
+cmb = cmb.query('cas in @chems["CASRN"]')
+
 cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_joined2.csv'), index=False)
 cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_joined2.csv'), index=False)
 cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined2.csv'), index=False)
 
-# fac_ids = pd.read_csv('/home/mike/git/earthjustice/stewi_comparison/tri_facilities_canceralley.csv',
-#                       dtype = {'TRI_FACILITY_ID': str})
-
-# flows = stewi.getInventoryFlows('TRI', '2017')
-# nei['medium'].unique()
-# harmonize medium
-# flows[flows.FlowID == '79-00-5']
-# chem = tri[tri.FlowName == '1,1,2-Trichloroethane']
+#this way doesn't account for multireporting
+# for source in sources:
 #
-# chem = chem[chem.FacilityID.isin(fac_ids.TRI_FACILITY_ID)]
-# chem = chem[chem.FacilityID.isin(fac_ids.TRI_FACILITY_ID)]
-# # chem.FacilityID.astype(int).max()
+#     source_d = pd.DataFrame()
 #
-# chem.FlowAmount.sum()
-# chem.shape
+#     for year in years:
+#
+#         print(source + ', ' + str(year))
+#         try:
+#             d = stewi.getInventory(source, year, US_States_Only = True)
+#         except:
+#             continue
+#
+#         flows = stewi.getInventoryFlows(source, year)
+#
+#         if source == 'NEI':
+#             casrns = [str(x) for x in chems['CASRN_nohyphens'].tolist()]
+#             chems_included = flows[flows['FlowID'].isin(casrns)]['FlowName'].tolist()
+#             flows.rename(columns={'FlowID':'CASRN'}, inplace=True)
+#         elif source == 'TRI':
+#             casrns = [str(x) for x in chems['CASRN'].tolist()]
+#             chems_included = flows[flows['CAS'].isin(casrns)]['FlowName'].tolist()
+#             flows.rename(columns={'FlowID':'CASRN'}, inplace=True)
+#         else: #DMR
+#             flows = flows.drop(['CAS'], axis=1)\
+#                 .merge(chem_synonyms[['CAS', source]], how='left',
+#                        left_on='FlowName', right_on=source)\
+#                 .dropna(how='all', subset=['CAS', 'DMR'])\
+#                 .drop([source], axis=1)\
+#                 .rename(columns={'CAS': 'CASRN'})
+#             casrns = [str(x) for x in chems['CASRN'].tolist()]
+#             chems_included = flows[flows['CASRN'].isin(casrns)]['FlowName'].tolist()
+#
+#         # src_chemnames = chem_synonyms[source][chem_synonyms[source].notnull()]
+#         # chems_included = flows[flows['FlowName'].isin(src_chemnames)]['FlowName'].tolist()
+#
+#         d = d.query('FlowName in @chems_included')
+#         # flows.rename(columns={'FlowID':'CASRN'}, inplace=True)
+#         d = d.merge(flows[['CASRN', 'FlowName']], how='left', on='FlowName')
+#
+#         if source == 'NEI':
+#             d = d.merge(chems[['CASRN', 'CASRN_nohyphens', 'ej_name']], how='left', left_on='CASRN', right_on='CASRN_nohyphens')
+#             d = d.drop(['CASRN_x'], axis=1)
+#             d.rename(columns={'CASRN_y': 'CASRN'}, inplace=True)
+#         else:
+#             d = d.merge(chems[['CASRN', 'CASRN_nohyphens', 'ej_name']], how='left', left_on='CASRN', right_on='CASRN')
+#
+#         facilities = stewi.getInventoryFacilities(source, year)
+#         facilities = facilities.assign(County = lambda df: df['County'].map(lambda x: clean_county_names(x)))
+#         facilities = facilities.query('((State == "KY") & (County == "JEFFERSON")) |' +\
+#                                       '((State == "TX") & (County in @tx_counties)) |' +\
+#                                       '((State == "LA") & (County in @la_parishes))')
+#
+#         if source == 'DMR':
+#             frs_ids = get_matches_for_id_list('DMR', facilities['FacilityID'])
+#             facilities = facilities.merge(frs_ids[['FRS_ID', 'FacilityID']],
+#                                           on='FacilityID', how='left')\
+#                 .rename(columns={'FRS_ID': 'FRS ID'})
+#
+#         d = facilities.merge(d, how='left', on='FacilityID')
+#         d = d.rename(columns={'State': 'state', 'County': 'county', 'CASRN': 'cas', 'Compartment': 'medium', 'FlowAmount': 'load_kg', 'Latitude': 'lat', 'Longitude': 'lon'})
+#         d['year'] = year
+#         d['source'] = source
+#         d['illegal'] = False
+#         d['location_set_to_county_centroid'] = False
+#
+#         if source == 'DMR':
+#             d = d[['year', 'state', 'county', 'cas', 'FRS ID', 'medium', 'load_kg', 'lat', 'lon', 'location_set_to_county_centroid', 'source', 'illegal']]
+#         else:
+#             d = d[['year', 'state', 'county', 'cas', 'medium', 'load_kg', 'lat', 'lon', 'location_set_to_county_centroid', 'source', 'illegal']]
+#         d = d.dropna(subset=['load_kg'])
+#         source_d = source_d.append(d, ignore_index=True)
+#
+#     src = source.lower()
+#
+#     source_d.to_csv(Path(wd, 'stewi_data', src + '_joined2.csv'))
 
-
-#---
+#--- scraps
 # source = 'NEI'
 # chems_included_fulllist = list()
 #

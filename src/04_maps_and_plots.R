@@ -31,7 +31,7 @@ houston_counties = cities %>%
     clean_county_names()
 
 emissions = read_csv('data/emissions_harmonized_epamethod_2010-22.csv',
-                     col_types = 'iccicnnnccc')
+                     col_types = 'icciccnnnlclc')
 # emissions = read_csv('data/emissions_harmonized_excess_distributed_evenly_2010-22.csv',
 #                      col_types = 'iccicnnnclc')
 
@@ -347,6 +347,7 @@ emissions %>%
 ## stacked bars for combined emissions
 
 emissions %>%
+    # filter(source != 'NPDES') %>%
     mutate(source = ifelse(source == 'NPDES', 'DMR', source)) %>%
     rename(Source = source) %>%
     # filter(county %in% houston_counties) %>%
@@ -413,7 +414,7 @@ emissions %>%
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
 
-ggsave('figs/plots/DMR_emissions.png', width = 8, height = 8)
+ggsave('figs/plots/DMR_emissions.png', width = 10, height = 5)
 
 ## bars for TRI
 
@@ -464,7 +465,8 @@ ggsave('figs/plots/NEI_emissions.png', width = 8, height = 8)
 ## across chems
 
 emissions %>%
-    filter(source == 'TRI') %>%
+    filter(source == 'TRI', cas != 79947) %>% #TBBPA is around 0.01 kg and messes up the plots
+    filter(! (target_location == 'Cancer Alley' & cas == 106990 & medium == 'water')) %>% #same
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
     mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
     group_by(`Chemical (CASRN)`, medium, target_location) %>%
@@ -650,6 +652,8 @@ for(loc in unique(emissions$target_location)){
 # sources = list('TRI', c('DMR', 'NEI', 'NPDES'))
 
 file.create('figs/plots/facility_counts.txt')
+dir.create('figs/plots/final_map_chemlists')
+file.create('figs/plots/final_map_chemlists/tri_only_louisville.txt')
 
 for(loc in unique(emissions$target_location)){
 
