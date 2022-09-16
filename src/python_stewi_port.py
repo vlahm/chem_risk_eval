@@ -63,7 +63,7 @@ for source in sources:
         .rename(columns={'FRS_ID': 'FRS ID'})
 
     facils = pd.concat([facils, src_facils], axis=0, ignore_index=True)\
-        .drop_duplicates()
+        .drop_duplicates(subset=['FacilityID'])
 
 cmb = list()
 cmb.append(combineFullInventories({'TRI':2010}, filter_for_LCI = False))
@@ -83,6 +83,7 @@ cmb.append(combineFullInventories({'DMR':2022}, filter_for_LCI = False))
 # cmb = pd.concat([cmb1, cmb2, cmb3, cmb4, cmb5, cmb6, cmb7, cmb8, cmb9, cmb10, cmb11, cmb12, cmb13], axis=0)
 
 cmb = pd.concat(cmb, axis=0)
+
 cmb = cmb.merge(facils[['FacilityID', 'FRS ID', 'NAICS', 'City', 'County', 'State', 'Latitude', 'Longitude']],
                 how='right', on='FacilityID')\
     .rename(columns={'State': 'state', 'County': 'county', 'SRS_CAS': 'cas',
@@ -196,3 +197,17 @@ cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined2.csv'), inde
 #     chems_included_fulllist.extend(chems_included)
 #
 # chems_included_fulllist = list(np.unique(np.array(chems_included_fulllist)))
+
+cmb.query('source == "TRI" & state == "TX" & county != "JEFFERSON" & year == 2010').load_kg.sum()
+
+all = combineFullInventories({'TRI':2014, 'NEI':2014, 'DMR':2014}, filter_for_LCI = False)
+tri = combineFullInventories({'TRI':2014}, filter_for_LCI = False)
+dmr = combineFullInventories({'DMR':2014}, filter_for_LCI = False)
+nei = combineFullInventories({'NEI':2014}, filter_for_LCI = False)
+
+all.query('Source == "TRI" & FlowName == "Formaldehyde"').FlowAmount.sum()
+all.query('Source == "DMR" & FlowName == "Formaldehyde"').FlowAmount.sum()
+all.query('Source == "NEI" & FlowName == "Formaldehyde"').FlowAmount.sum()
+tri.query('FlowName == "Formaldehyde"').FlowAmount.sum()
+dmr.query('FlowName == "Formaldehyde"').FlowAmount.sum()
+nei.query('FlowName == "Formaldehyde"').FlowAmount.sum()
