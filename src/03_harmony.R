@@ -293,6 +293,6 @@ out = bind_rows(dmr, nei) %>%
 #     ungroup() %>%
 #     select(-location_set_to_county_centroid, -n, -load_kg_excess)
 
-write_csv(out, 'data/emissions_harmonized_epamethod_2010-22.csv')
+write_csv(out, 'data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv')
 # write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')
 # write_csv(out_avg_load_distributed, 'data/emissions_harmonized_excess_distributed_evenly_2010-22.csv')

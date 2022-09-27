@@ -30,7 +30,7 @@ houston_counties = cities %>%
     pull(county) %>%
     clean_county_names()
 
-emissions = read_csv('data/emissions_harmonized_epamethod_2010-22.csv',
+emissions = read_csv('data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv',
                      col_types = 'icciccnnnlclc')
 # emissions = read_csv('data/emissions_harmonized_excess_distributed_evenly_2010-22.csv',
 #                      col_types = 'iccicnnnclc')
