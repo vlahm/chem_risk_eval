@@ -23,17 +23,15 @@ source('src/00_globals.R')
 
 cas = read_csv('data/general/target_substances.csv', col_types=cols())
 
-cities = read_csv('data/general/cities.csv', col_types=cols())
+cities = read_csv('data/general/cities.csv', col_types=cols()) %>%
+    mutate(county = clean_county_names(county))
 
 houston_counties = cities %>%
     filter(! is.na(city) & city == 'HOUSTON') %>%
-    pull(county) %>%
-    clean_county_names()
+    pull(county)
 
 emissions = read_csv('data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv',
                      col_types = 'icciccnnnlclc')
-# emissions = read_csv('data/emissions_harmonized_excess_distributed_evenly_2010-22.csv',
-#                      col_types = 'iccicnnnclc')
 
 sources = unique(emissions$source)
 

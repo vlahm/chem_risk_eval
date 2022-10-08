@@ -10,18 +10,6 @@ from facilitymatcher import get_matches_for_id_list
 
 wd = '/home/mike/git/earthjustice/chem_risk_eval/data'
 
-cities = pd.read_csv(Path(wd, 'general/cities.csv'),
-                     dtype = {'EIS_FACILITY_ID': str})
-tx_counties = cities[cities['state'] == 'TX']['county'].tolist()
-la_parishes = cities[cities['state'] == 'LA']['county'].tolist()
-
-chems = pd.read_csv(Path(wd, 'general/target_substances.csv'),
-                    dtype = {'EIS_FACILITY_ID': str})
-chems['CASRN_nohyphens'] = chems['CASRN_nohyphens'].map(lambda x: str(x))
-
-ej_cas = [str(x) for x in chems['CASRN'].tolist()]
-chem_synonyms = get_program_synomyms_for_CAS_list(ej_cas, ['TRI', 'NEI', 'DMR'])
-
 def clean_county_names(x):
 
     x = x.upper()
@@ -32,6 +20,19 @@ def clean_county_names(x):
     x = re.sub('^SAINT', 'ST', x)
 
     return(x)
+
+cities = pd.read_csv(Path(wd, 'general/cities.csv'),
+                     dtype = {'EIS_FACILITY_ID': str})\
+    .assign(county = lambda df: df['county'].map(lambda x: clean_county_names(x)))
+tx_counties = cities[cities['state'] == 'TX']['county'].tolist()
+la_parishes = cities[cities['state'] == 'LA']['county'].tolist()
+
+chems = pd.read_csv(Path(wd, 'general/target_substances.csv'),
+                    dtype = {'EIS_FACILITY_ID': str})
+chems['CASRN_nohyphens'] = chems['CASRN_nohyphens'].map(lambda x: str(x))
+
+ej_cas = [str(x) for x in chems['CASRN'].tolist()]
+chem_synonyms = get_program_synomyms_for_CAS_list(ej_cas, ['TRI', 'NEI', 'DMR'])
 
 years = list(range(2010, 2023))
 sources = ['NEI', 'TRI', 'DMR']

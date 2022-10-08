@@ -17,20 +17,15 @@ source('src/00_globals.R')
 
 cas = read_csv('data/general/target_substances.csv', col_types=cols())
 
-cities = read_csv('data/general/cities.csv', col_types=cols())
-
-# houston_counties = cities %>%
-#     filter(! is.na(city) & city == 'HOUSTON') %>%
-#     pull(county)
+cities = read_csv('data/general/cities.csv', col_types=cols()) %>%
+    mutate(county = clean_county_names(county))
 
 houston_counties = cities %>%
     filter(! is.na(city) & city == 'HOUSTON') %>%
-    pull(county) %>%
-    clean_county_names()
+    pull(county)
 
 county_centroids = cities %>%
-    select(state, county, cty_lat = lat, cty_lon = lon) %>%
-    mutate(county = clean_county_names(county))
+    select(state, county, cty_lat = lat, cty_lon = lon)
 
 # harmonize DMR data (custom way; OBSOLETE) ####
 
