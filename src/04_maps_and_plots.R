@@ -835,21 +835,93 @@ tri_chems = emissions %>%
 #tri load by location
 emissions %>%
     filter(source == 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     group_by(target_location) %>%
-    summarize(load_lb = sum(load_lb)) %>%
+    summarize(load_lb = sum(load_lb),
+              nchems = length(unique(cas))) %>%
     ungroup()
 
-#non-tri load by location
+#non-tri load by location (for tri chems)
 emissions %>%
     filter(source != 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
     filter(! is.na(indicator)) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     group_by(target_location) %>%
     # filter(cas %in% filter(tri_chems, target_location
-    summarize(load_lb = sum(load_lb)) %>%
+    summarize(load_lb = sum(load_lb),
+              nchems = length(unique(cas))) %>%
     ungroup()
+
+#non-tri load by location
+emissions %>%
+    filter(source != 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    group_by(target_location) %>%
+    summarize(load_lb = sum(load_lb),
+              nchems = length(unique(cas))) %>%
+    ungroup()
+
+#tri chems by location
+emissions %>%
+    filter(source == 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
+    group_by(target_location) %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
+    summarize(chems = paste(unique(ej_name), collapse = ', ')) %>%
+    ungroup() %>%
+    as.data.frame()
+
+#tri chems reported to NEI and DMR by location
+emissions %>%
+    filter(source != 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
+    left_join(tri_chems, by = c('target_location', 'cas')) %>%
+    filter(! is.na(indicator)) %>%
+    group_by(target_location) %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
+    summarize(chems = paste(unique(ej_name), collapse = ', ')) %>%
+    ungroup() %>%
+    as.data.frame()
+
+#all chems reported to NEI and DMR by location
+emissions %>%
+    filter(source != 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
+    group_by(target_location) %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
+    summarize(chems = paste(unique(ej_name), collapse = ', ')) %>%
+    ungroup() %>%
+    as.data.frame()
+
+#tri total load
+emissions %>%
+    filter(source == 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    summarize(load_lb = sum(load_lb),
+              nchems = length(unique(cas)))
+
+#non-tri total load for tri chems
+emissions %>%
+    filter(source != 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
+    left_join(tri_chems, by = c('target_location', 'cas')) %>%
+    filter(! is.na(indicator)) %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    summarize(load_lb = sum(load_lb),
+              nchems = length(unique(cas)))
+
+#non-tri total load
+emissions %>%
+    filter(source != 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    summarize(load_lb = sum(load_lb),
+              nchems = length(unique(cas)))
 
 #port arthur formaldehyde
 emissions %>%
@@ -862,6 +934,7 @@ emissions %>%
 #tri facility counts
 emissions %>%
     filter(source == 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
     distinct(target_location, lat, lon) %>%
     group_by(target_location) %>%
     summarize(n = n()) %>%
@@ -870,10 +943,25 @@ emissions %>%
 #non-tri facility counts
 emissions %>%
     filter(source != 'TRI') %>%
+    filter(year %in% 2011:2018) %>%
     distinct(target_location, lat, lon) %>%
     group_by(target_location) %>%
     summarize(n = n()) %>%
     ungroup()
+
+#release volumes by chem, location, and source (2011-2018)
+
+emissions %>%
+    mutate(source = ifelse(source %in% c('DMR', 'NEI', 'NPDES'), 'DMR-NEI', 'TRI')) %>%
+    filter(year %in% 2011:2018) %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+    group_by(ej_name, source, target_location) %>%
+    summarize(load_kg = sum(load_kg)) %>%
+    ungroup() %>%
+    pivot_wider(names_from = source, values_from = load_kg) %>%
+    arrange(target_location, ej_name) %>%
+    relocate(target_location, .before = ej_name) %>%
+    print(n = 100)
 
 # gifs? ####
 
