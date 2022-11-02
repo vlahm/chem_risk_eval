@@ -33,6 +33,8 @@ houston_counties = cities %>%
 emissions = read_csv('data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv',
                      col_types = 'icciccnnnlclc')
 
+emissions_11_18 = filter(emissions, year %in% 2011:2018)
+
 sources = unique(emissions$source)
 
 #create directory structure for storing plots and maps
@@ -653,9 +655,9 @@ file.create('figs/plots/facility_counts.txt')
 dir.create('figs/plots/final_map_chemlists')
 file.create('figs/plots/final_map_chemlists/tri_only_louisville.txt')
 
-for(loc in unique(emissions$target_location)){
+for(loc in unique(emissions_11_18$target_location)){
 
-    dd = filter(emissions, target_location == loc)
+    dd = filter(emissions_11_18, target_location == loc)
 
     if(loc == 'Houston'){
         map_scale = 10
@@ -825,7 +827,7 @@ for(loc in unique(emissions$target_location)){
 # some quick numbers ####
 
 #tri chems by location
-tri_chems = emissions %>%
+tri_chems = emissions_11_18 %>%
     filter(source == 'TRI') %>%
     group_by(target_location) %>%
     summarize(cas = unique(cas)) %>%
@@ -833,9 +835,8 @@ tri_chems = emissions %>%
     mutate(indicator = 1)
 
 #tri load by location
-emissions %>%
+emissions_11_18 %>%
     filter(source == 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     group_by(target_location) %>%
     summarize(load_lb = sum(load_lb),
@@ -843,9 +844,8 @@ emissions %>%
     ungroup()
 
 #non-tri load by location (for tri chems)
-emissions %>%
+emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
     filter(! is.na(indicator)) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
@@ -856,9 +856,8 @@ emissions %>%
     ungroup()
 
 #non-tri load by location
-emissions %>%
+emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     group_by(target_location) %>%
     summarize(load_lb = sum(load_lb),
@@ -866,9 +865,8 @@ emissions %>%
     ungroup()
 
 #tri chems by location
-emissions %>%
+emissions_11_18 %>%
     filter(source == 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     group_by(target_location) %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
     summarize(chems = paste(unique(ej_name), collapse = ', ')) %>%
@@ -876,9 +874,8 @@ emissions %>%
     as.data.frame()
 
 #tri chems reported to NEI and DMR by location
-emissions %>%
+emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
     filter(! is.na(indicator)) %>%
     group_by(target_location) %>%
@@ -888,9 +885,8 @@ emissions %>%
     as.data.frame()
 
 #all chems reported to NEI and DMR by location
-emissions %>%
+emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     group_by(target_location) %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
     summarize(chems = paste(unique(ej_name), collapse = ', ')) %>%
@@ -898,17 +894,15 @@ emissions %>%
     as.data.frame()
 
 #tri total load
-emissions %>%
+emissions_11_18 %>%
     filter(source == 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
 
 #non-tri total load for tri chems
-emissions %>%
+emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
     filter(! is.na(indicator)) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
@@ -916,9 +910,8 @@ emissions %>%
               nchems = length(unique(cas)))
 
 #non-tri total load
-emissions %>%
+emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
@@ -932,18 +925,16 @@ emissions %>%
     summarize(load_lb = sum(load_lb))
 
 #tri facility counts
-emissions %>%
+emissions_11_18 %>%
     filter(source == 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     distinct(target_location, lat, lon) %>%
     group_by(target_location) %>%
     summarize(n = n()) %>%
     ungroup()
 
 #non-tri facility counts
-emissions %>%
+emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    filter(year %in% 2011:2018) %>%
     distinct(target_location, lat, lon) %>%
     group_by(target_location) %>%
     summarize(n = n()) %>%
@@ -951,9 +942,8 @@ emissions %>%
 
 #release volumes by chem, location, and source (2011-2018)
 
-emissions %>%
+emissions_11_18 %>%
     mutate(source = ifelse(source %in% c('DMR', 'NEI', 'NPDES'), 'DMR-NEI', 'TRI')) %>%
-    filter(year %in% 2011:2018) %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
     group_by(ej_name, source, target_location) %>%
     summarize(load_kg = sum(load_kg)) %>%
