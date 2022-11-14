@@ -242,6 +242,22 @@ tri = read_csv('data/stewi_data_tri_joined2.csv') %>%
 
 npdes_loads = rename(npdes_loads, frs_id = FRS_ID)
 
+# ONE-TIME-ONLY load DMR, NEI, TRI data (retrieved via stewi, NEI-DMR priority) ####
+#
+# dmr = read_csv('data/stewi_data_dmr_joined_dmrNeiPriority.csv') %>%
+#     mutate(cas = gsub('-', '', cas),
+#            frs_id = as.character(frs_id))
+#
+# nei = read_csv('data/stewi_data_nei_joined_dmrNeiPriority.csv') %>%
+#     mutate(cas = gsub('-', '', cas),
+#            frs_id = as.character(frs_id))
+#
+# tri = read_csv('data/stewi_data_tri_joined_dmrNeiPriority.csv') %>%
+#     mutate(cas = gsub('-', '', cas),
+#            frs_id = as.character(frs_id))
+#
+# npdes_loads = rename(npdes_loads, frs_id = FRS_ID)
+
 # correct DMR data to avoid double-counting of effluent exceedances also reported to NPDES ####
 
 # multireports = npdes_loads %>%
@@ -288,6 +304,7 @@ out = bind_rows(dmr, nei) %>%
 #     ungroup() %>%
 #     select(-location_set_to_county_centroid, -n, -load_kg_excess)
 
+# write_csv(out, 'data/emissions_harmonized_epamethod_NEIDMRpriority_2010-22.csv')
 write_csv(out, 'data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv')
 # write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')
 # write_csv(out_avg_load_distributed, 'data/emissions_harmonized_excess_distributed_evenly_2010-22.csv')

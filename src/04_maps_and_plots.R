@@ -31,14 +31,37 @@ houston_counties = cities %>%
     pull(county)
 
 emissions = read_csv('data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv',
-                     col_types = 'icciccnnnlclc')
+                     col_types = 'icciccnnnlclc') %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    select(-load_kg) %>%
+    relocate(load_lb, .after = medium)
+
+emissions_dmrnei_priority = read_csv('data/emissions_harmonized_epamethod_NEIDMRpriority_2010-22.csv',
+                     col_types = 'icciccnnnlclc') %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    select(-load_kg) %>%
+    relocate(load_lb, .after = medium)
 
 emissions_11_18 = filter(emissions, year %in% 2011:2018)
 
 sources = unique(emissions$source)
 
+uniq_chems = emissions %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+    pull(`Chemical (CASRN)`) %>%
+    unique() %>%
+    sort()
+
+colors = hue_pal(h.start = 30)(length(uniq_chems))
+
+chems_and_colors = colors
+names(chems_and_colors) = uniq_chems
+
 #create directory structure for storing plots and maps
 dir.create('figs/plots/', recursive = TRUE, showWarnings = FALSE)
+dir.create('figs/fig_values/', recursive = TRUE, showWarnings = FALSE)
+dir.create('figs/fig_values/map_values', recursive = TRUE, showWarnings = FALSE)
 dir.create('figs/load_maps/by_source_and_location', recursive = TRUE, showWarnings = FALSE)
 dir.create('figs/load_maps/by_source_and_location/by_chem', showWarnings = FALSE)
 dir.create('figs/load_maps/by_source_and_location/by_year', showWarnings = FALSE)
@@ -86,7 +109,7 @@ for(loc in unique(emissions$target_location)){
 
             ddo = ddfilt %>%
                 group_by(lat, lon) %>%
-                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                summarize(load_lb = sum(load_lb, na.rm = TRUE),
                           .groups = 'drop')
 
             ej_map2_pointsize(
@@ -102,12 +125,12 @@ for(loc in unique(emissions$target_location)){
                 left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
                 filter(! is.na(rsei_weight))
 
-            load_kg_rsei = ddo_rsei_f$load_kg * ddo_rsei_f$rsei_weight
-            ddo_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddo_rsei_f$load_kg)
+            load_lb_rsei = ddo_rsei_f$load_lb * ddo_rsei_f$rsei_weight
+            ddo_rsei_f$load_lb = load_lb_rsei / sum(load_lb_rsei) * sum(ddo_rsei_f$load_lb)
 
             ddo_rsei = ddo_rsei_f %>%
                 group_by(lat, lon) %>%
-                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                summarize(load_lb = sum(load_lb, na.rm = TRUE),
                           .groups = 'drop')
 
             if(nrow(ddo_rsei)){
@@ -143,7 +166,7 @@ for(loc in unique(emissions$target_location)){
 
                 ddc = ddfilt2 %>%
                     group_by(lat, lon) %>%
-                    summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                    summarize(load_lb = sum(load_lb, na.rm = TRUE),
                               .groups = 'drop')
 
                 if(nrow(ddc)){
@@ -162,12 +185,12 @@ for(loc in unique(emissions$target_location)){
                         left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
                         filter(! is.na(rsei_weight))
 
-                    load_kg_rsei = ddc_rsei_f$load_kg * ddc_rsei_f$rsei_weight
-                    ddc_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddc_rsei_f$load_kg)
+                    load_lb_rsei = ddc_rsei_f$load_lb * ddc_rsei_f$rsei_weight
+                    ddc_rsei_f$load_lb = load_lb_rsei / sum(load_lb_rsei) * sum(ddc_rsei_f$load_lb)
 
                     ddc_rsei = ddc_rsei_f %>%
                         group_by(lat, lon) %>%
-                        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                        summarize(load_lb = sum(load_lb, na.rm = TRUE),
                                   .groups = 'drop')
 
                     if(nrow(ddc_rsei)){
@@ -199,7 +222,7 @@ for(loc in unique(emissions$target_location)){
 
                         ddy1 = ddfilt3 %>%
                             group_by(lat, lon) %>%
-                            summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                            summarize(load_lb = sum(load_lb, na.rm = TRUE),
                                       .groups = 'drop')
 
                         if(nrow(ddy1)){
@@ -219,12 +242,12 @@ for(loc in unique(emissions$target_location)){
                                 left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
                                 filter(! is.na(rsei_weight))
 
-                            load_kg_rsei = ddy1_rsei_f$load_kg * ddy1_rsei_f$rsei_weight
-                            ddy1_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddy1_rsei_f$load_kg)
+                            load_lb_rsei = ddy1_rsei_f$load_lb * ddy1_rsei_f$rsei_weight
+                            ddy1_rsei_f$load_lb = load_lb_rsei / sum(load_lb_rsei) * sum(ddy1_rsei_f$load_lb)
 
                             ddy1_rsei = ddy1_rsei_f %>%
                                 group_by(lat, lon) %>%
-                                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                                summarize(load_lb = sum(load_lb, na.rm = TRUE),
                                           .groups = 'drop')
 
                             if(nrow(ddy1_rsei)){
@@ -263,7 +286,7 @@ for(loc in unique(emissions$target_location)){
 
                 ddy2 = ddfilt4 %>%
                     group_by(lat, lon) %>%
-                    summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                    summarize(load_lb = sum(load_lb, na.rm = TRUE),
                               .groups = 'drop')
 
                 if(nrow(ddy2)){
@@ -282,12 +305,12 @@ for(loc in unique(emissions$target_location)){
                         left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
                         filter(! is.na(rsei_weight))
 
-                    load_kg_rsei = ddy2_rsei_f$load_kg * ddy2_rsei_f$rsei_weight
-                    ddy2_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddy2_rsei_f$load_kg)
+                    load_lb_rsei = ddy2_rsei_f$load_lb * ddy2_rsei_f$rsei_weight
+                    ddy2_rsei_f$load_lb = load_lb_rsei / sum(load_lb_rsei) * sum(ddy2_rsei_f$load_lb)
 
                     ddy2_rsei = ddy2_rsei_f %>%
                         group_by(lat, lon) %>%
-                        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                        summarize(load_lb = sum(load_lb, na.rm = TRUE),
                                   .groups = 'drop')
 
                     if(nrow(ddy2_rsei)){
@@ -340,21 +363,23 @@ for(loc in unique(emissions$target_location)){
 
 emissions %>%
     group_by(cas, source) %>%
-    summarize(load_kg = sum(load_kg)) %>%
+    summarize(load_lb = sum(load_lb)) %>%
     ungroup() %>%
-    print(n=100)
+    print(n = 100)
 
 ## stacked bars for combined emissions
 
-emissions %>%
+ee = emissions %>%
     # filter(source != 'NPDES') %>%
     mutate(source = ifelse(source == 'NPDES', 'DMR', source)) %>%
     rename(Source = source) %>%
     # filter(county %in% houston_counties) %>%
     group_by(year, Source, target_location) %>%
-    summarize(load_kg = sum(load_kg)) %>%
-    ungroup() %>%
-    ggplot(aes(fill = Source, x = year, y = load_kg)) +
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+write_csv(ee, 'figs/fig_values/combined_emissions.csv')
+ee %>%
+    ggplot(aes(fill = Source, x = year, y = load_lb)) +
     geom_bar(position = 'stack', stat = 'identity') +
     # scale_y_continuous(labels = label_number(suffix = " M", scale = 1e-6, big.mark = ',')) +
     scale_y_continuous(labels = label_number(suffix = ' K', scale = 1e-3, big.mark = '')) +
@@ -365,7 +390,7 @@ emissions %>%
     # annotation_logticks()
     facet_wrap(.~target_location, scales = 'free_y') +
     labs(title = 'Combined emissions across 14 of 24 high-priority chemicals by year, source, and location',
-         y = 'Emissions (kg)') +
+         y = 'Emissions (lb)') +
     guides(x = guide_axis(angle = 45)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
@@ -375,88 +400,112 @@ ggsave('figs/plots/combined_emissions.png', width = 8, height = 8)
 
 ## bars for NPDES
 
-emissions %>%
+ee = emissions %>%
     filter(source == 'NPDES') %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
-    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')'))
+ee2 = ee %>%
     group_by(`Chemical (CASRN)`, year, target_location) %>%
-    summarize(load_kg = sum(load_kg)) %>%
-    ungroup() %>%
-    ggplot(aes(fill = `Chemical (CASRN)`, x = year, y = load_kg)) +
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+write_csv(ee2, 'figs/fig_values/illegal_emissions.csv')
+ee2 %>%
+    ggplot(aes(fill = `Chemical (CASRN)`, x = year, y = load_lb)) +
     geom_bar(position = 'stack', stat = 'identity') +
     scale_x_continuous(name = NULL, breaks = 2010:2022, labels = 2010:2022) +
     facet_wrap(.~target_location, scales = 'free_y') +
     labs(title = 'NPDES illegal emissions by year, chemical, and location',
-         y = 'Emissions (kg)') +
+         y = 'Emissions (lb)') +
     guides(x = guide_axis(angle = 45)) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+    scale_fill_manual(name = 'Chemical (CASRN)',
+                      breaks = uniq_chems[uniq_chems %in% unique(ee$`Chemical (CASRN)`)],
+                      values = chems_and_colors[names(chems_and_colors) %in% unique(ee$`Chemical (CASRN)`)])
 
 ggsave('figs/plots/illegal_emissions.png', width = 8, height = 4)
 
 ## bars for DMR
 
-emissions %>%
+ee = emissions_dmrnei_priority %>%
     mutate(source = ifelse(source == 'NPDES', 'DMR', source)) %>%
     filter(source == 'DMR') %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
-    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')'))
+ee2 = ee %>%
     group_by(`Chemical (CASRN)`, year, target_location) %>%
-    summarize(load_kg = sum(load_kg)) %>%
-    ungroup() %>%
-    ggplot(aes(fill = `Chemical (CASRN)`, x = year, y = load_kg)) +
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+write_csv(ee2, 'figs/fig_values/DMR_emissions.csv')
+ee2 %>%
+    ggplot(aes(fill = `Chemical (CASRN)`, x = year, y = load_lb)) +
     geom_bar(position = 'stack', stat = 'identity') +
     scale_x_continuous(name = NULL, breaks = 2010:2022, labels = 2010:2022) +
     facet_wrap(.~target_location, scales = 'free_y') +
     labs(title = 'DMR emissions by year, chemical, and location',
-         y = 'Emissions (kg)') +
+         y = 'Emissions (lb)') +
     guides(x = guide_axis(angle = 45)) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+    scale_fill_manual(name = 'Chemical (CASRN)',
+                      breaks = uniq_chems[uniq_chems %in% unique(ee$`Chemical (CASRN)`)],
+                      values = chems_and_colors[names(chems_and_colors) %in% unique(ee$`Chemical (CASRN)`)])
 
 ggsave('figs/plots/DMR_emissions.png', width = 10, height = 5)
 
 ## bars for TRI
 
-emissions %>%
+ee = emissions %>%
     filter(source == 'TRI') %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
-    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')'))
+ee2 = ee %>%
     group_by(`Chemical (CASRN)`, year, target_location) %>%
-    summarize(load_kg = sum(load_kg)) %>%
-    ungroup() %>%
-    ggplot(aes(fill = `Chemical (CASRN)`, x = year, y = load_kg)) +
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+write_csv(ee2, 'figs/fig_values/TRI_emissions.csv')
+ee2 %>%
+    ggplot(aes(fill = `Chemical (CASRN)`, x = year, y = load_lb)) +
     geom_bar(position = 'stack', stat = 'identity') +
     scale_y_continuous(labels = label_number(suffix = ' K', scale = 1e-3, big.mark = '')) +
     scale_x_continuous(name = NULL, breaks = 2010:2022, labels = 2010:2022) +
     facet_wrap(.~target_location, scales = 'free_y') +
     labs(title = 'TRI emissions by year, chemical, and location',
-         y = 'Emissions (kg)') +
+         y = 'Emissions (lb)') +
     guides(x = guide_axis(angle = 45)) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+    scale_fill_manual(name = 'Chemical (CASRN)',
+                      breaks = uniq_chems[uniq_chems %in% unique(ee$`Chemical (CASRN)`)],
+                      values = chems_and_colors[names(chems_and_colors) %in% unique(ee$`Chemical (CASRN)`)])
 
 ggsave('figs/plots/TRI_emissions.png', width = 8, height = 8)
 
 ## bars for NEI
 
-emissions %>%
+ee = emissions_dmrnei_priority %>%
     filter(source == 'NEI') %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
-    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+    mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')'))
+ee2 = ee %>%
     group_by(`Chemical (CASRN)`, year, target_location) %>%
-    summarize(load_kg = sum(load_kg)) %>%
-    ungroup() %>%
-    ggplot(aes(fill = `Chemical (CASRN)`, x = factor(year), y = load_kg)) +
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+write_csv(ee2, 'figs/fig_values/NEI_emissions.csv')
+ee2 %>%
+    ggplot(aes(fill = `Chemical (CASRN)`, x = factor(year), y = load_lb)) +
     geom_bar(position = 'stack', stat = 'identity') +
     scale_y_continuous(labels = label_number(suffix = ' K', scale = 1e-3, big.mark = '')) +
     scale_x_discrete(name = NULL, breaks = as.character(2010:2022), labels = as.character(2010:2022)) +
     facet_wrap(.~target_location, scales = 'free_y') +
     labs(title = 'NEI emissions by year, chemical, and location',
-         y = 'Emissions (kg)') +
+         y = 'Emissions (lb)') +
     guides(x = guide_axis(angle = 45)) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+    scale_fill_manual(name = 'Chemical (CASRN)',
+                      breaks = uniq_chems[uniq_chems %in% unique(ee$`Chemical (CASRN)`)],
+                      values = chems_and_colors[names(chems_and_colors) %in% unique(ee$`Chemical (CASRN)`)])
 
 ggsave('figs/plots/NEI_emissions.png', width = 8, height = 8)
 
@@ -464,19 +513,21 @@ ggsave('figs/plots/NEI_emissions.png', width = 8, height = 8)
 
 ## across chems
 
-emissions %>%
-    filter(source == 'TRI', cas != 79947) %>% #TBBPA is around 0.01 kg and messes up the plots
+ee = emissions %>%
+    filter(source == 'TRI', cas != 79947) %>% #TBBPA is around 0.01 lb and messes up the plots
     filter(! (target_location == 'Cancer Alley' & cas == 106990 & medium == 'water')) %>% #same
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
     mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
     group_by(`Chemical (CASRN)`, medium, target_location) %>%
-    summarize(load_kg = sum(load_kg)) %>%
-    ungroup() %>%
-    ggplot(aes(x = `Chemical (CASRN)`, fill = medium, y = load_kg)) +
+    summarize(load_lb = sum(load_lb)) %>%
+    ungroup()
+write_csv(ee, 'figs/fig_values/TRI_emissions_by_release_medium.csv')
+ee %>%
+    ggplot(aes(x = `Chemical (CASRN)`, fill = medium, y = load_lb)) +
     geom_col(position = position_dodge2(width = 1, preserve = 'single')) +
     facet_wrap(.~target_location, scales = 'free') +
     labs(title = 'TRI emissions by release medium, chemical, and location',
-         y = 'Emissions (kg)') +
+         y = 'Emissions (lb)') +
     guides(x = guide_axis(angle = 55)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(),
@@ -591,7 +642,7 @@ for(loc in unique(emissions$target_location)){
 
             ddo = ddfilt %>%
                 group_by(lat, lon) %>%
-                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                summarize(load_lb = sum(load_lb, na.rm = TRUE),
                           .groups = 'drop')
 
             ej_map2_pointsize(
@@ -609,12 +660,12 @@ for(loc in unique(emissions$target_location)){
                 left_join(select(cas, cas = CASRN_nohyphens, rsei_weight)) %>%
                 filter(! is.na(rsei_weight))
 
-            load_kg_rsei = ddo_rsei_f$load_kg * ddo_rsei_f$rsei_weight
-            ddo_rsei_f$load_kg = load_kg_rsei / sum(load_kg_rsei) * sum(ddo_rsei_f$load_kg)
+            load_lb_rsei = ddo_rsei_f$load_lb * ddo_rsei_f$rsei_weight
+            ddo_rsei_f$load_lb = load_lb_rsei / sum(load_lb_rsei) * sum(ddo_rsei_f$load_lb)
 
             ddo_rsei = ddo_rsei_f %>%
                 group_by(lat, lon) %>%
-                summarize(load_kg = sum(load_kg, na.rm = TRUE),
+                summarize(load_lb = sum(load_lb, na.rm = TRUE),
                           .groups = 'drop')
 
             if(nrow(ddo_rsei)){
@@ -684,6 +735,16 @@ for(loc in unique(emissions_11_18$target_location)){
     src = 'TRI'
     ddfilt = filter(dd, source %in% !!src)
 
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/tri_{lc}_trichems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
     tri_cas = unique(ddfilt$cas)
     tri_chem = filter(cas, CASRN_nohyphens %in% tri_cas) %>% pull(ej_name)
     # print(glue('{src}, {loc} ({cnt}): {chm}',
@@ -696,7 +757,7 @@ for(loc in unique(emissions_11_18$target_location)){
 
     ddo = ddfilt %>%
         group_by(lat, lon) %>%
-        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
                   .groups = 'drop')
 
     write_lines(glue('{loc}, TRI, TRI chems: {nrow(ddo)} facilities'),
@@ -715,6 +776,16 @@ for(loc in unique(emissions_11_18$target_location)){
     ddfilt = filter(dd, source %in% !!src)
     ddfilt = filter(dd, cas %in% tri_cas)
 
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/dmr_nei_{lc}_trichems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
     unique_cas = unique(ddfilt$cas)
     unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
     # print(glue('{src}, {loc} ({cnt}): {chm}',
@@ -724,7 +795,7 @@ for(loc in unique(emissions_11_18$target_location)){
 
     ddo = ddfilt %>%
         group_by(lat, lon) %>%
-        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
                   .groups = 'drop')
 
     write_lines(glue('{loc}, DMR+NEI, TRI chems: {nrow(ddo)} facilities'),
@@ -743,6 +814,16 @@ for(loc in unique(emissions_11_18$target_location)){
     ddfilt = filter(dd, source %in% !!src)
     ddfilt = filter(dd, ! cas %in% tri_cas)
 
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/dmr_nei_{lc}_nontrichems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
     unique_cas = unique(ddfilt$cas)
     unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
     # print(glue('{src}, {loc} ({cnt}): {chm}',
@@ -755,7 +836,7 @@ for(loc in unique(emissions_11_18$target_location)){
 
     ddo = ddfilt %>%
         group_by(lat, lon) %>%
-        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
                   .groups = 'drop')
 
     write_lines(glue('{loc}, DMR+NEI, non-TRI chems: {nrow(ddo)} facilities'),
@@ -773,6 +854,16 @@ for(loc in unique(emissions_11_18$target_location)){
     src = c('DMR', 'NEI', 'NPDES')
     ddfilt = filter(dd, source %in% !!src)
 
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/dmr_nei_{lc}_allchems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
     unique_cas = unique(ddfilt$cas)
     unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
     # print(glue('{src}, {loc} ({cnt}): {chm}',
@@ -782,7 +873,7 @@ for(loc in unique(emissions_11_18$target_location)){
 
     ddo = ddfilt %>%
         group_by(lat, lon) %>%
-        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
                   .groups = 'drop')
 
     write_lines(glue('{loc}, DMR+NEI, all chems: {nrow(ddo)} facilities'),
@@ -800,6 +891,16 @@ for(loc in unique(emissions_11_18$target_location)){
     src = c('TRI', 'DMR', 'NEI', 'NPDES')
     ddfilt = filter(dd, source %in% !!src)
 
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/tri_dmr_nei_{lc}_allchems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
     unique_cas = unique(ddfilt$cas)
     unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
     # print(glue('{src}, {loc} ({cnt}): {chm}',
@@ -809,7 +910,7 @@ for(loc in unique(emissions_11_18$target_location)){
 
     ddo = ddfilt %>%
         group_by(lat, lon) %>%
-        summarize(load_kg = sum(load_kg, na.rm = TRUE),
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
                   .groups = 'drop')
 
     write_lines(glue('{loc}, TRI+DMR+NEI, all chems: {nrow(ddo)} facilities'),
@@ -837,7 +938,6 @@ tri_chems = emissions_11_18 %>%
 #tri load by location
 emissions_11_18 %>%
     filter(source == 'TRI') %>%
-    mutate(load_lb = load_kg * 2.20462) %>%
     group_by(target_location) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas))) %>%
@@ -848,7 +948,6 @@ emissions_11_18 %>%
     filter(source != 'TRI') %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
     filter(! is.na(indicator)) %>%
-    mutate(load_lb = load_kg * 2.20462) %>%
     group_by(target_location) %>%
     # filter(cas %in% filter(tri_chems, target_location
     summarize(load_lb = sum(load_lb),
@@ -858,7 +957,6 @@ emissions_11_18 %>%
 #non-tri load by location
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    mutate(load_lb = load_kg * 2.20462) %>%
     group_by(target_location) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas))) %>%
@@ -896,7 +994,6 @@ emissions_11_18 %>%
 #tri total load
 emissions_11_18 %>%
     filter(source == 'TRI') %>%
-    mutate(load_lb = load_kg * 2.20462) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
 
@@ -905,14 +1002,12 @@ emissions_11_18 %>%
     filter(source != 'TRI') %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
     filter(! is.na(indicator)) %>%
-    mutate(load_lb = load_kg * 2.20462) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
 
 #non-tri total load
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
-    mutate(load_lb = load_kg * 2.20462) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
 
@@ -921,7 +1016,6 @@ emissions %>%
     filter(source != 'TRI',
            cas == 50000,
            target_location == 'Port Arthur') %>%
-    mutate(load_lb = load_kg * 2.20462) %>%
     summarize(load_lb = sum(load_lb))
 
 #tri facility counts
@@ -946,9 +1040,9 @@ emissions_11_18 %>%
     mutate(source = ifelse(source %in% c('DMR', 'NEI', 'NPDES'), 'DMR-NEI', 'TRI')) %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
     group_by(ej_name, source, target_location) %>%
-    summarize(load_kg = sum(load_kg)) %>%
+    summarize(load_lb = sum(load_lb)) %>%
     ungroup() %>%
-    pivot_wider(names_from = source, values_from = load_kg) %>%
+    pivot_wider(names_from = source, values_from = load_lb) %>%
     arrange(target_location, ej_name) %>%
     relocate(target_location, .before = ej_name) %>%
     print(n = 100)

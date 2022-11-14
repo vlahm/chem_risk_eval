@@ -579,7 +579,7 @@ ej_heatmap = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE
              ymin = latrange[1], ymax = latrange[2], crs='EPSG:4326')
 
     dvect = vect(d, geom=c('lon', 'lat'), crs = 'EPSG:4326')
-    drast = rasterize(dvect, r, field='load_kg', fun=sum)
+    drast = rasterize(dvect, r, field='load_lb', fun=sum)
 
     # palRaster = colorBin('Spectral',
                          # bins = 7,
@@ -621,7 +621,7 @@ ej_heatmap = function(d, center, scale, res, latrange, lonrange, addpoints=FALSE
                        opacity = .6) %>%
         addLegend(pal = palRaster,
                   values = values(drast),
-                  title = 'Cumulative Load (kg)')
+                  title = 'Cumulative Load (lb)')
         # addControl(title, position = "topleft", className="map-title")
 
     if(addpoints){
@@ -646,8 +646,8 @@ ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoint
 
     if(! type %in% c('load', 'rsei')) stop('type must be either "load" or "rsei"')
 
-    ldmax_true = max(d$load_kg, na.rm = TRUE)
-    dload = log10(d$load_kg)
+    ldmax_true = max(d$load_lb, na.rm = TRUE)
+    dload = log10(d$load_lb)
 
     cutoff_val = 1
     d$pointsize = NA
@@ -680,7 +680,7 @@ ej_map2_pointsize = function(d, center, scale, res, latrange, lonrange, addpoint
                          labels = labelAdditions, ...))
     }
 
-    lgnd = ifelse(type == 'load', 'Cumulative Load (kg)', 'RSEI-weighted<br>Cumulative Load (kg)')
+    lgnd = ifelse(type == 'load', 'Cumulative Load (lb)', 'RSEI-weighted<br>Cumulative Load (lb)')
 
     mapout = leaflet()
 

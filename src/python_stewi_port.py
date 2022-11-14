@@ -92,6 +92,13 @@ cmb = cmb.merge(facils[['FacilityID', 'FRS ID', 'NAICS', 'City', 'County', 'Stat
                      'Latitude': 'lat', 'Longitude': 'lon',
                      'Source': 'source', 'Year': 'year', 'FRS ID': 'frs_id'})\
     .dropna(subset=['load_kg'])
+
+#some flows are missing cas numbers. look them up via SRS id (which is called subsKey in the chem table)
+cmb = cmb.merge(chems[['CASRN', 'subsKey_str']],
+          how='inner', left_on='SRS_ID', right_on='subsKey_str')\
+    .rename(columns={'CASRN': 'cas'})\
+    .drop(['subsKey_str'], axis=1)
+
 cmb['illegal'] = False
 cmb['location_set_to_county_centroid'] = False
 
@@ -99,9 +106,9 @@ cmb = cmb[['year', 'state', 'county', 'cas', 'frs_id', 'medium', 'load_kg', 'lat
 
 cmb = cmb.query('cas in @chems["CASRN"]')
 
-cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_joined2.csv'), index=False)
-cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_joined2.csv'), index=False)
-cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined2.csv'), index=False)
+cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_joined_dmrNeiPriority.csv'), index=False)
+cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_joined_dmrNeiPriority.csv'), index=False)
+cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined_dmrNeiPriority.csv'), index=False)
 
 #this way doesn't account for multireporting
 # for source in sources:
