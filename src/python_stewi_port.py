@@ -30,6 +30,7 @@ la_parishes = cities[cities['state'] == 'LA']['county'].tolist()
 chems = pd.read_csv(Path(wd, 'general/target_substances.csv'),
                     dtype = {'EIS_FACILITY_ID': str})
 chems['CASRN_nohyphens'] = chems['CASRN_nohyphens'].map(lambda x: str(x))
+chems['subsKey_str'] = chems['subsKey'].map(lambda x: str(x))
 
 ej_cas = [str(x) for x in chems['CASRN'].tolist()]
 chem_synonyms = get_program_synomyms_for_CAS_list(ej_cas, ['TRI', 'NEI', 'DMR'])
@@ -84,14 +85,18 @@ cmb.append(combineFullInventories({'DMR':2022}, filter_for_LCI = False))
 # cmb = pd.concat([cmb1, cmb2, cmb3, cmb4, cmb5, cmb6, cmb7, cmb8, cmb9, cmb10, cmb11, cmb12, cmb13], axis=0)
 
 cmb = pd.concat(cmb, axis=0)
+cmb['FlowAmount'].sum()
 
 cmb = cmb.merge(facils[['FacilityID', 'FRS ID', 'NAICS', 'City', 'County', 'State', 'Latitude', 'Longitude']],
                 how='right', on='FacilityID')\
-    .rename(columns={'State': 'state', 'County': 'county', 'SRS_CAS': 'cas',
+    .rename(columns={'State': 'state', 'County': 'county',# 'SRS_CAS': 'cas',
                      'Compartment': 'medium', 'FlowAmount': 'load_kg',
                      'Latitude': 'lat', 'Longitude': 'lon',
                      'Source': 'source', 'Year': 'year', 'FRS ID': 'frs_id'})\
+    .drop(['SRS_CAS'], axis=1)\
     .dropna(subset=['load_kg'])
+
+# cmb[cmb['SRS_ID'].isnull()]
 
 #some flows are missing cas numbers. look them up via SRS id (which is called subsKey in the chem table)
 cmb = cmb.merge(chems[['CASRN', 'subsKey_str']],
@@ -109,6 +114,9 @@ cmb = cmb.query('cas in @chems["CASRN"]')
 cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_joined_dmrNeiPriority.csv'), index=False)
 cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_joined_dmrNeiPriority.csv'), index=False)
 cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined_dmrNeiPriority.csv'), index=False)
+# cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_joined_TriPriority.csv'), index=False)
+# cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_joined_TriPriority.csv'), index=False)
+# cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined_TriPriority.csv'), index=False)
 
 #this way doesn't account for multireporting
 # for source in sources:

@@ -226,52 +226,60 @@ npdes_concs = npdes_loads_concs %>%
            lat, lon,
            location_set_to_county_centroid, source, illegal)
 
-# load DMR, NEI, TRI data (retrieved via stewi) ####
+# load DMR, NEI, TRI data (retrieved via stewi, TRI priority) ####
 
-dmr = read_csv('data/stewi_data_dmr_joined2.csv') %>%
+# ggg='data/stewi_data_dmr_joined_TriPriority.csv'
+# ggg='data/stewi_data_nei_joined_TriPriority.csv'
+# ggg='data/stewi_data_tri_joined_TriPriority.csv'
+# read_csv(ggg) %>%
+#     select(-`cas...4`) %>%
+#     rename(cas = 'cas...5') %>%
+#     write_csv(ggg)
+
+dmr = read_csv('data/stewi_data_dmr_joined_TriPriority.csv') %>%
     mutate(cas = gsub('-', '', cas),
            frs_id = as.character(frs_id))
 
-nei = read_csv('data/stewi_data_nei_joined2.csv') %>%
+nei = read_csv('data/stewi_data_nei_joined_TriPriority.csv') %>%
     mutate(cas = gsub('-', '', cas),
            frs_id = as.character(frs_id))
 
-tri = read_csv('data/stewi_data_tri_joined2.csv') %>%
+tri = read_csv('data/stewi_data_tri_joined_TriPriority.csv') %>%
     mutate(cas = gsub('-', '', cas),
            frs_id = as.character(frs_id))
 
 npdes_loads = rename(npdes_loads, frs_id = FRS_ID)
 
-# ONE-TIME-ONLY load DMR, NEI, TRI data (retrieved via stewi, NEI-DMR priority) ####
-#
-# dmr = read_csv('data/stewi_data_dmr_joined_dmrNeiPriority.csv') %>%
-#     mutate(cas = gsub('-', '', cas),
-#            frs_id = as.character(frs_id))
-#
-# nei = read_csv('data/stewi_data_nei_joined_dmrNeiPriority.csv') %>%
-#     mutate(cas = gsub('-', '', cas),
-#            frs_id = as.character(frs_id))
-#
-# tri = read_csv('data/stewi_data_tri_joined_dmrNeiPriority.csv') %>%
-#     mutate(cas = gsub('-', '', cas),
-#            frs_id = as.character(frs_id))
-#
-# npdes_loads = rename(npdes_loads, frs_id = FRS_ID)
+# load DMR, NEI, TRI data (retrieved via stewi, NEI-DMR priority; alternative path continuous with the steps below) ####
+
+dmr = read_csv('data/stewi_data_dmr_joined_dmrNeiPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+nei = read_csv('data/stewi_data_nei_joined_dmrNeiPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+tri = read_csv('data/stewi_data_tri_joined_dmrNeiPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+npdes_loads = rename(npdes_loads, frs_id = FRS_ID)
 
 # correct DMR data to avoid double-counting of effluent exceedances also reported to NPDES ####
 
-# multireports = npdes_loads %>%
-#     rename(frs_id = FRS_ID) %>%
-#     left_join(dmr, by=c('year', 'state', 'county', 'cas', 'frs_id')) %>%
-#     select(year, state, county, cas, frs_id,
-#            multirp_amt = load_kg.x, dmr_total = load_kg.y) %>%
-#     filter(! is.na(dmr_total)) %>%
-#     select(-dmr_total)
+multireports = npdes_loads %>%
+    # rename(frs_id = FRS_ID) %>%
+    left_join(dmr, by=c('year', 'state', 'county', 'cas', 'frs_id')) %>%
+    select(year, state, county, cas, frs_id,
+           multirp_amt = load_kg.x, dmr_total = load_kg.y) %>%
+    filter(! is.na(dmr_total)) %>%
+    select(-dmr_total)
 
-# dmr = dmr %>%
-#     left_join(multireports, by = c('year', 'state', 'county', 'cas', 'frs_id')) %>%
-#     mutate(load_kg = ifelse(! is.na(multirp_amt), load_kg - multirp_amt, load_kg)) %>%
-#     select(-multirp_amt)
+dmr = dmr %>%
+    left_join(multireports, by = c('year', 'state', 'county', 'cas', 'frs_id')) %>%
+    mutate(load_kg = ifelse(! is.na(multirp_amt), load_kg - multirp_amt, load_kg)) %>%
+    select(-multirp_amt)
 
 # combine ####
 
@@ -304,7 +312,7 @@ out = bind_rows(dmr, nei) %>%
 #     ungroup() %>%
 #     select(-location_set_to_county_centroid, -n, -load_kg_excess)
 
-# write_csv(out, 'data/emissions_harmonized_epamethod_NEIDMRpriority_2010-22.csv')
-write_csv(out, 'data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv')
+write_csv(out, 'data/emissions_harmonized_epamethod_NEIDMRpriority_2010-22.csv')
+# write_csv(out, 'data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv')
 # write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')
 # write_csv(out_avg_load_distributed, 'data/emissions_harmonized_excess_distributed_evenly_2010-22.csv')

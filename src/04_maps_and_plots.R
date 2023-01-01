@@ -30,17 +30,122 @@ houston_counties = cities %>%
     filter(! is.na(city) & city == 'HOUSTON') %>%
     pull(county)
 
-emissions = read_csv('data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv',
+emissions0 = read_csv('data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv',
                      col_types = 'icciccnnnlclc') %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     select(-load_kg) %>%
-    relocate(load_lb, .after = medium)
+    relocate(load_lb, .after = medium) %>%
+    mutate(inv_pref = 'TRI')
 
-emissions_dmrnei_priority = read_csv('data/emissions_harmonized_epamethod_NEIDMRpriority_2010-22.csv',
+emissions_dmrnei_priority0 = read_csv('data/emissions_harmonized_epamethod_NEIDMRpriority_2010-22.csv',
                      col_types = 'icciccnnnlclc') %>%
     mutate(load_lb = load_kg * 2.20462) %>%
     select(-load_kg) %>%
-    relocate(load_lb, .after = medium)
+    relocate(load_lb, .after = medium) %>%
+    mutate(inv_pref = 'NEI-DMR')
+
+# stewi's accounting for reporting overlap just removes non-preference inventories wholesale.
+# fix that, assuming 100% overlap
+cmb = bind_rows(emissions0, emissions_dmrnei_priority0) %>%
+    mutate(source = tolower(source)) %>%
+    unite('src_med', source, medium, inv_pref) %>%
+    # select(-lat, -lon, -location_set_to_county_centroid, -illegal,
+    #        -target_location) %>%
+    distinct(year, state, county, cas, frs_id, src_med, load_lb,
+             .keep_all = TRUE) %>%
+    pivot_wider(names_from = src_med, values_from = load_lb)
+
+#determined that there are no discrepancies within sources + across preferences
+# cmb = cmb %>%
+#     mutate(dmr_water_dif = dmr_water_TRI - `dmr_water_NEI-DMR`,
+#            nei_air_dif = nei_air_TRI - `nei_air_NEI-DMR`,
+#            tri_air_dif = tri_air_TRI - `tri_air_NEI-DMR`,
+#            tri_water_dif = tri_water_TRI - `tri_water_NEI-DMR`,
+#            tri_soil_dif = tri_soil_TRI - `tri_soil_NEI-DMR`)
+# filter(cmb, if_any(ends_with('_dif'), ~ (! is.na(.) & . != 0))) %>%
+#     select(year, state, county, cas, frs_id, ends_with('_dif'))
+# zz = rowSums(select(cmb, ends_with('_dif')), na.rm = TRUE)
+# table(zz)
+
+fixed = cmb %>%
+    mutate(
+       water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
+       air_dif = tri_air_TRI - `nei_air_NEI-DMR`)
+    # filter((! is.na(water_dif) & water_dif != 0) |
+    #            ((! is.na(air_dif) & air_dif != 0))) %>%
+    # arrange(water_dif) %>%
+    # slice(1:5) %>%
+    # print() %>%
+
+dmr_surplus = ! is.na(fixed$water_dif) & fixed$water_dif < 0
+nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif < 0
+tri_surplus = ! is.na(fixed$water_dif) & (fixed$water_dif > 0 | fixed$air_dif > 0)
+
+fixed$dmr_water_TRI[dmr_surplus] = fixed$`dmr_water_NEI-DMR`[dmr_surplus] - fixed$tri_water_TRI[dmr_surplus]
+fixed$dmr_water_TRI[tri_surplus] = 0
+fixed$`tri_water_NEI-DMR`[dmr_surplus] = fixed$tri_water_TRI[dmr_surplus] - fixed$`dmr_water_NEI-DMR`[dmr_surplus]
+fixed$`tri_water_NEI-DMR`[tri_surplus] = 0
+fixed$nei_air_TRI[nei_surplus] = fixed$`nei_air_NEI-DMR`[nei_surplus] - fixed$tri_air_TRI[nei_surplus]
+fixed$nei_air_TRI[tri_surplus] = 0
+fixed$`tri_air_NEI-DMR`[nei_surplus] = fixed$tri_air_TRI[nei_surplus] - fixed$`nei_air_NEI-DMR`[nei_surplus]
+fixed$`tri_air_NEI-DMR`[tri_surplus] = 0
+
+fixed$dmrnei_surplus = dmr_surplus | nei_surplus
+fixed$tri_surplus = tri_surplus
+
+fixed = fixed %>%
+    # mutate(
+    #    water_dif = `tri_water_NEI-DMR` - dmr_water_TRI,
+    #    air_dif = `tri_air_NEI-DMR` - nei_air_TRI)
+    select(-water_dif, -air_dif) %>%
+    pivot_longer(ends_with(c('DMR', 'TRI'), ignore.case = FALSE),
+                 names_to = c('source', 'medium', 'inv_pref'),
+                 names_sep = '_',
+                 values_to = 'load_lb') %>%
+    mutate(source = toupper(source)) %>%
+    filter(! is.na(load_lb) & load_lb != 0)
+
+emissions = fixed %>%
+    filter(
+        inv_pref == 'TRI' |
+        (inv_pref == 'NEI-DMR' & dmrnei_surplus)) %>%
+    select(-inv_pref)
+
+emissions_dmrnei_priority = fixed %>%
+    filter(
+        inv_pref == 'NEI-DMR' |
+        (inv_pref == 'TRI' & tri_surplus)) %>%
+    select(-inv_pref)
+
+sum(emissions0$load_lb)
+sum(emissions$load_lb)
+sum(emissions_dmrnei_priority0$load_lb)
+sum(emissions_dmrnei_priority$load_lb)
+
+
+# xx = anti_join(emissions_dmrnei_priority0, emissions0, by = c('year', 'state', 'county', 'cas', 'frs_id', 'medium', 'load_lb')) %>%
+#     select(-location_set_to_county_centroid, -target_location, -illegal, -lat, -lon)
+# yy = anti_join(emissions0, emissions_dmrnei_priority0, by = c('year', 'state', 'county', 'cas', 'frs_id', 'medium', 'load_lb')) %>%
+#     select(-location_set_to_county_centroid, -target_location, -illegal, -lat, -lon)
+# qq = full_join(xx, yy, by = c("year", "state", "county", "cas", "frs_id", "medium")) %>%
+#     arrange(year, state, county, cas, frs_id)
+#     # relocate(load_lb.x, .after='source')
+# # filter(qq, !is.na(load_lb.x), !is.na(load_lb.y))
+# mutate(qq, dif = load_lb.x - load_lb.y) %>% arrange(dif) %>% View()
+#
+# xx = select(emissions_dmrnei_priority0, -location_set_to_county_centroid, -target_location, -illegal, -lat, -lon)
+# yy = select(emissions0, -location_set_to_county_centroid, -target_location, -illegal, -lat, -lon)
+# qq = full_join(xx, yy, by = c("year", "state", "county", "cas", "frs_id", "medium")) %>%
+#     arrange(year, state, county, cas, frs_id)
+# qq = mutate(qq, dif = load_lb.x - load_lb.y) %>% arrange(dif)
+# filter(qq, dif > 0) %>% arrange(desc(dif))
+# filter(qq, dif == 0) %>% arrange(desc(dif))
+#
+# filter(qq, year == 2015, state == 'TX', county == 'HARRIS', cas == 106990, frs_id == 110031267064)
+# filter(qq, year == 2015, state == 'TX', county == 'HARRIS', cas == 106990, frs_id == 110000463221)
+#
+# filter(xx, year == 2011, state == 'KY', county == 'JEFFERSON', cas == 50000, frs_id == 110000378467)
+# filter(yy, year == 2011, state == 'KY', county == 'JEFFERSON', cas == 50000, frs_id == 110000378467)
 
 emissions_11_18 = filter(emissions, year %in% 2011:2018)
 
@@ -1061,3 +1166,6 @@ emissions_11_18 %>%
 #     image_join() %>% # joins image
 #     image_animate(fps=4) %>% # animates, can opt for number of loops
 #     image_write("FileName.gif") # write to current dir
+
+# compare target locations to country at large ####
+
