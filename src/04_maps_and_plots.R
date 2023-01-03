@@ -17,6 +17,14 @@ library(scales)
 sw = suppressWarnings
 sm = suppressMessages
 
+## make choices here:
+
+dates = '2010-2018'
+# dates = '2010-2022'
+
+overlap = 'union'
+# overlap = 'setdiff'
+
 # setup ####
 
 source('src/00_globals.R')
@@ -44,84 +52,185 @@ emissions_dmrnei_priority0 = read_csv('data/emissions_harmonized_epamethod_NEIDM
     relocate(load_lb, .after = medium) %>%
     mutate(inv_pref = 'NEI-DMR')
 
+if(dates == '2010-2018'){
+    emissions0 = filter(emissions0, year %in% 2010:2018)
+    emissions_dmrnei_priority0 = filter(emissions_dmrnei_priority0, year %in% 2010:2018)
+}
+
 # stewi's accounting for reporting overlap just removes non-preference inventories wholesale.
 # fix that, assuming 100% overlap
 cmb = bind_rows(emissions0, emissions_dmrnei_priority0) %>%
+    select(-illegal, -location_set_to_county_centroid) %>%
     mutate(source = tolower(source)) %>%
     unite('src_med', source, medium, inv_pref) %>%
     # select(-lat, -lon, -location_set_to_county_centroid, -illegal,
     #        -target_location) %>%
     distinct(year, state, county, cas, frs_id, src_med, load_lb,
-             .keep_all = TRUE) %>%
-    pivot_wider(names_from = src_med, values_from = load_lb)
+             .keep_all = TRUE)
 
-#determined that there are no discrepancies within sources + across preferences
-# cmb = cmb %>%
-#     mutate(dmr_water_dif = dmr_water_TRI - `dmr_water_NEI-DMR`,
-#            nei_air_dif = nei_air_TRI - `nei_air_NEI-DMR`,
-#            tri_air_dif = tri_air_TRI - `tri_air_NEI-DMR`,
-#            tri_water_dif = tri_water_TRI - `tri_water_NEI-DMR`,
-#            tri_soil_dif = tri_soil_TRI - `tri_soil_NEI-DMR`)
-# filter(cmb, if_any(ends_with('_dif'), ~ (! is.na(.) & . != 0))) %>%
-#     select(year, state, county, cas, frs_id, ends_with('_dif'))
-# zz = rowSums(select(cmb, ends_with('_dif')), na.rm = TRUE)
-# table(zz)
+conformed_latlongs = cmb %>%
+    select(year, state, county, cas, frs_id, src_med, lat, lon) %>%
+    group_by(year, state, county, cas, frs_id) %>%
+    summarize(lat = mean(lat),
+              lon = mean(lon)) %>%
+    ungroup() %>%
+    rename(latnew = lat, lonnew = lon)
 
-fixed = cmb %>%
-    mutate(
-       water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
-       air_dif = tri_air_TRI - `nei_air_NEI-DMR`)
-    # filter((! is.na(water_dif) & water_dif != 0) |
-    #            ((! is.na(air_dif) & air_dif != 0))) %>%
-    # arrange(water_dif) %>%
-    # slice(1:5) %>%
-    # print() %>%
+cmb = cmb %>%
+    left_join(conformed_latlongs, by = c('year', 'state', 'county', 'cas', 'frs_id')) %>%
+    select(-lat, -lon) %>%
+    rename(lat = latnew, lon = lonnew)
 
-dmr_surplus = ! is.na(fixed$water_dif) & fixed$water_dif < 0
-nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif < 0
-tri_surplus = ! is.na(fixed$water_dif) & (fixed$water_dif > 0 | fixed$air_dif > 0)
+if(overlap == 'setdiff'){
 
-fixed$dmr_water_TRI[dmr_surplus] = fixed$`dmr_water_NEI-DMR`[dmr_surplus] - fixed$tri_water_TRI[dmr_surplus]
-fixed$dmr_water_TRI[tri_surplus] = 0
-fixed$`tri_water_NEI-DMR`[dmr_surplus] = fixed$tri_water_TRI[dmr_surplus] - fixed$`dmr_water_NEI-DMR`[dmr_surplus]
-fixed$`tri_water_NEI-DMR`[tri_surplus] = 0
-fixed$nei_air_TRI[nei_surplus] = fixed$`nei_air_NEI-DMR`[nei_surplus] - fixed$tri_air_TRI[nei_surplus]
-fixed$nei_air_TRI[tri_surplus] = 0
-fixed$`tri_air_NEI-DMR`[nei_surplus] = fixed$tri_air_TRI[nei_surplus] - fixed$`nei_air_NEI-DMR`[nei_surplus]
-fixed$`tri_air_NEI-DMR`[tri_surplus] = 0
+    cmb = cmb %>%
+        pivot_wider(names_from = src_med, values_from = load_lb)
 
-fixed$dmrnei_surplus = dmr_surplus | nei_surplus
-fixed$tri_surplus = tri_surplus
+    #determined that there are no discrepancies within sources + across preferences
+    # cmb = cmb %>%
+    #     mutate(dmr_water_dif = dmr_water_TRI - `dmr_water_NEI-DMR`,
+    #            nei_air_dif = nei_air_TRI - `nei_air_NEI-DMR`,
+    #            tri_air_dif = tri_air_TRI - `tri_air_NEI-DMR`,
+    #            tri_water_dif = tri_water_TRI - `tri_water_NEI-DMR`,
+    #            tri_soil_dif = tri_soil_TRI - `tri_soil_NEI-DMR`)
+    # filter(cmb, if_any(ends_with('_dif'), ~ (! is.na(.) & . != 0))) %>%
+    #     select(year, state, county, cas, frs_id, ends_with('_dif'))
+    # zz = rowSums(select(cmb, ends_with('_dif')), na.rm = TRUE)
+    # table(zz)
 
-fixed = fixed %>%
-    # mutate(
-    #    water_dif = `tri_water_NEI-DMR` - dmr_water_TRI,
-    #    air_dif = `tri_air_NEI-DMR` - nei_air_TRI)
-    select(-water_dif, -air_dif) %>%
-    pivot_longer(ends_with(c('DMR', 'TRI'), ignore.case = FALSE),
-                 names_to = c('source', 'medium', 'inv_pref'),
-                 names_sep = '_',
-                 values_to = 'load_lb') %>%
-    mutate(source = toupper(source)) %>%
-    filter(! is.na(load_lb) & load_lb != 0)
+    fixed = cmb %>%
+        mutate(
+           water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
+           water_pct_dif = water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100,
+           air_dif = tri_air_TRI - `nei_air_NEI-DMR`,
+           air_pct_dif = air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100)
+        # filter((! is.na(water_dif) & water_dif != 0) |
+        #            ((! is.na(air_dif) & air_dif != 0))) %>%
+        # arrange(water_dif) %>%
+        # slice(1:5) %>%
+        # print() %>%
 
-emissions = fixed %>%
-    filter(
-        inv_pref == 'TRI' |
-        (inv_pref == 'NEI-DMR' & dmrnei_surplus)) %>%
-    select(-inv_pref)
+    dmr_surplus = ! is.na(fixed$water_dif) & fixed$water_dif < 0
+    nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif < 0
+    tri_surplus_water = ! is.na(fixed$water_dif) & fixed$water_dif > 0
+    tri_surplus_air = ! is.na(fixed$air_dif) & fixed$air_dif > 0
+    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif < 0 & fixed$water_pct_dif >= 0.5
+    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif < 0 & fixed$air_pct_dif >= 0.5
+    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif > 0 & fixed$water_pct_dif >= 0.5
+    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif > 0 & fixed$air_pct_dif >= 0.5
 
-emissions_dmrnei_priority = fixed %>%
-    filter(
-        inv_pref == 'NEI-DMR' |
-        (inv_pref == 'TRI' & tri_surplus)) %>%
-    select(-inv_pref)
+    stat5 = sum(! is.na(fixed$water_dif) & fixed$water_pct_dif < 0.5)
+    stat6 = sum(! is.na(fixed$air_dif) & fixed$air_pct_dif < 0.5)
 
-sum(emissions0$load_lb)
-sum(emissions$load_lb)
-sum(emissions_dmrnei_priority0$load_lb)
-sum(emissions_dmrnei_priority$load_lb)
+    #remove overlap from the non-preference source
+    fixed$dmr_water_TRI[dmr_surplus] = fixed$`dmr_water_NEI-DMR`[dmr_surplus] - fixed$tri_water_TRI[dmr_surplus]
+    fixed$dmr_water_TRI[tri_surplus_water] = 0
+    fixed$`tri_water_NEI-DMR`[dmr_surplus] = 0
+    fixed$`tri_water_NEI-DMR`[tri_surplus_water] = fixed$tri_water_TRI[tri_surplus_water] - fixed$`dmr_water_NEI-DMR`[tri_surplus_water]
+    fixed$nei_air_TRI[nei_surplus] = fixed$`nei_air_NEI-DMR`[nei_surplus] - fixed$tri_air_TRI[nei_surplus]
+    fixed$nei_air_TRI[tri_surplus_air] = 0
+    fixed$`tri_air_NEI-DMR`[nei_surplus] = 0
+    fixed$`tri_air_NEI-DMR`[tri_surplus_air] = fixed$tri_air_TRI[tri_surplus_air] - fixed$`nei_air_NEI-DMR`[tri_surplus_air]
 
+    fixed$dmr_surplus = dmr_surplus_true
+    fixed$nei_surplus = nei_surplus_true
+    fixed$tri_surplus_water = tri_surplus_water_true
+    fixed$tri_surplus_air = tri_surplus_air_true
+
+    # #to combine overlap (but not in cases of identical numbers reported to both)
+    # fixed$dmr_water_TRI[dmr_surplus_true] = fixed$`dmr_water_NEI-DMR`[dmr_surplus_true] + fixed$tri_water_TRI[dmr_surplus_true]
+    # fixed$dmr_water_TRI[tri_surplus_water_true] = fixed$`dmr_water_NEI-DMR`[tri_surplus_water_true] + fixed$tri_water_TRI[tri_surplus_water_true]
+    # fixed$`tri_water_NEI-DMR`[dmr_surplus_true] = fixed$`dmr_water_NEI-DMR`[dmr_surplus_true] + fixed$tri_water_TRI[dmr_surplus_true]
+    # fixed$`tri_water_NEI-DMR`[tri_surplus_water_true] = fixed$tri_water_TRI[tri_surplus_water_true] + fixed$`dmr_water_NEI-DMR`[tri_surplus_water_true]
+    # fixed$nei_air_TRI[nei_surplus_true] = fixed$`nei_air_NEI-DMR`[nei_surplus_true] + fixed$tri_air_TRI[nei_surplus_true]
+    # fixed$nei_air_TRI[tri_surplus_air_true] = fixed$`nei_air_NEI-DMR`[tri_surplus_air_true] + fixed$tri_air_TRI[tri_surplus_air_true]
+    # fixed$`tri_air_NEI-DMR`[nei_surplus_true] = fixed$`nei_air_NEI-DMR`[nei_surplus_true] + fixed$tri_air_TRI[nei_surplus_true]
+    # fixed$`tri_air_NEI-DMR`[tri_surplus_air_true] = fixed$tri_air_TRI[tri_surplus_air_true] + fixed$`nei_air_NEI-DMR`[tri_surplus_air_true]
+
+    stat1 = length(na.omit(fixed$`dmr_water_NEI-DMR`))
+    stat2 = length(na.omit(fixed$`nei_air_NEI-DMR`))
+    stat3 = length(na.omit(fixed$tri_water_TRI))
+    stat4 = length(na.omit(fixed$tri_air_TRI))
+
+    # fixed$dmr_surplus = dmr_surplus
+    # fixed$nei_surplus = nei_surplus
+    # fixed$tri_surplus_water = tri_surplus_water
+    # fixed$tri_surplus_air = tri_surplus_air
+
+    fixed = fixed %>%
+        # mutate(
+        #    water_dif = `tri_water_NEI-DMR` - dmr_water_TRI,
+        #    air_dif = `tri_air_NEI-DMR` - nei_air_TRI)
+        select(-water_dif, -air_dif) %>%
+        pivot_longer(ends_with(c('DMR', 'TRI'), ignore.case = FALSE),
+                     names_to = c('source', 'medium', 'inv_pref'),
+                     names_sep = '_',
+                     values_to = 'load_lb') %>%
+        mutate(source = toupper(source)) %>%
+        filter(! is.na(load_lb) & load_lb != 0)
+
+    emissions = fixed %>%
+        filter(
+            inv_pref == 'TRI') %>%
+        # (inv_pref == 'NEI-DMR' & (dmr_surplus | nei_surplus))) %>%
+        select(-inv_pref)
+
+    emissions_dmrnei_priority = fixed %>%
+        filter(
+            inv_pref == 'NEI-DMR') %>%
+        # (inv_pref == 'TRI' & (tri_surplus_water | tri_surplus_air))) %>%
+        select(-inv_pref)
+
+    #stats:
+    stat1
+    stat2
+    stat3
+    stat4
+    sum(dmr_surplus_true) + sum(tri_surplus_water_true)
+    sum(nei_surplus_true) + sum(tri_surplus_air_true)
+    stat5
+    stat6
+    sum(dmr_surplus_true)
+    sum(nei_surplus_true)
+    sum(tri_surplus_water_true)
+    sum(tri_surplus_air_true)
+    sum(filter(emissions0, medium == 'water')$load_lb)
+    sum(filter(emissions_dmrnei_priority0, medium == 'water')$load_lb)
+    sum(filter(emissions, medium == 'water')$load_lb)
+    sum(filter(emissions_dmrnei_priority, medium == 'water')$load_lb)
+    sum(filter(emissions0, medium == 'air')$load_lb)
+    sum(filter(emissions_dmrnei_priority0, medium == 'air')$load_lb)
+    sum(filter(emissions, medium == 'air')$load_lb)
+    sum(filter(emissions_dmrnei_priority, medium == 'air')$load_lb)
+
+} else {
+
+    emissions = emissions_dmrnei_priority = cmb %>%
+        separate(src_med, c('source', 'medium', 'inv_pref'), sep = '_') %>%
+        pivot_wider(names_from = inv_pref,
+                    values_from = load_lb) %>%
+        mutate(dif = TRI - `NEI-DMR`,
+               pct_dif = dif / (TRI * `NEI-DMR` / 2) * 100,
+               load_lb = `NEI-DMR`,
+               load_lb = case_when(! is.na(pct_dif) & pct_dif >= 0.5 ~ TRI + `NEI-DMR`,
+                                   is.na(load_lb) ~ TRI,
+                                   TRUE ~ load_lb)) %>%
+        select(-TRI, -`NEI-DMR`, -dif, -pct_dif) %>%
+        mutate(source = toupper(source))
+}
+
+emissions$illegal = emissions$source == 'NPDES'
+emissions$location_set_to_county_centroid = FALSE
+emissions_dmrnei_priority$illegal = emissions_dmrnei_priority$source == 'NPDES'
+emissions_dmrnei_priority$location_set_to_county_centroid = FALSE
+
+sum(filter(emissions, medium == 'water')$load_lb)
+sum(filter(emissions, medium == 'air')$load_lb)
+
+# sum(filter(emissions, medium == 'water', source != 'NPDES')$load_lb)
+# sum(filter(emissions_dmrnei_priority, medium == 'water', source != 'NPDES')$load_lb)
+# sum(filter(emissions, medium == 'air', source != 'NPDES')$load_lb)
+# sum(filter(emissions_dmrnei_priority, medium == 'air', source != 'NPDES')$load_lb)
 
 # xx = anti_join(emissions_dmrnei_priority0, emissions0, by = c('year', 'state', 'county', 'cas', 'frs_id', 'medium', 'load_lb')) %>%
 #     select(-location_set_to_county_centroid, -target_location, -illegal, -lat, -lon)
