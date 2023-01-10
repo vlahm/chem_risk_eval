@@ -337,3 +337,22 @@ bind_rows(dmr, nei) %>%
     distinct(year, state, county, cas, medium, frs_id, source,
              .keep_all = TRUE) %>%
     write_csv('data/emissions_allUSA_TRIpriority_2011-18.csv')
+
+
+dmr = read_csv('data/stewi_data_dmr_allUSA_dmrneiPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+nei = read_csv('data/stewi_data_nei_allUSA_dmrneiPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+tri = read_csv('data/stewi_data_tri_allUSA_dmrneiPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+bind_rows(dmr, nei) %>%
+    bind_rows(tri) %>%
+    distinct(year, state, county, cas, medium, frs_id, source,
+             .keep_all = TRUE) %>%
+    write_csv('data/emissions_allUSA_DMRNEIpriority_2011-18.csv')

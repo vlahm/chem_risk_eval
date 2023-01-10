@@ -1590,9 +1590,6 @@ if(overlap == 'setdiff'){
     tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif > 0 & fixed$water_pct_dif >= 0.5
     tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif > 0 & fixed$air_pct_dif >= 0.5
 
-    stat5 = sum(! is.na(fixed$water_dif) & fixed$water_pct_dif < 0.5)
-    stat6 = sum(! is.na(fixed$air_dif) & fixed$air_pct_dif < 0.5)
-
     #remove overlap from the non-preference source
     fixed$dmr_water_TRI[dmr_surplus] = fixed$`dmr_water_NEI-DMR`[dmr_surplus] - fixed$tri_water_TRI[dmr_surplus]
     fixed$dmr_water_TRI[tri_surplus_water] = 0
@@ -1607,11 +1604,6 @@ if(overlap == 'setdiff'){
     fixed$nei_surplus = nei_surplus_true
     fixed$tri_surplus_water = tri_surplus_water_true
     fixed$tri_surplus_air = tri_surplus_air_true
-
-    stat1 = length(na.omit(fixed$`dmr_water_NEI-DMR`))
-    stat2 = length(na.omit(fixed$`nei_air_NEI-DMR`))
-    stat3 = length(na.omit(fixed$tri_water_TRI))
-    stat4 = length(na.omit(fixed$tri_air_TRI))
 
     fixed = fixed %>%
         select(-water_dif, -air_dif) %>%
@@ -1648,19 +1640,99 @@ if(overlap == 'setdiff'){
         mutate(source = toupper(source))
 }
 
-# write corrected files ####
+# write_csv(emissions_dmrnei_priority_allUSA, 'data/emissions_corrected_allUSA_NEIDMRpriority_2010-22.csv')
+# emissions_dmrnei_priority_allUSA = read_csv('data/emissions_corrected_allUSA_NEIDMRpriority_2010-22.csv')
 
-# write_csv(emissions_dmrnei_priority, 'data/emissions_corrected_NEIDMRpriority_2010-22.csv')
+#get percents by location, across all years
 
-
-
-top3chems = emissions_allUSA %>%
+loc_cas_sums = emissions_dmrnei_priority_11_18 %>%
     group_by(target_location, cas) %>%
     summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
     ungroup() %>%
-    arrange(target_location, desc(load_lb)) %>%
-    # print(n=100) %>%
+    arrange(target_location, desc(load_lb))
+
+top3chems = loc_cas_sums %>%
+    print(n=100) %>%
     slice(1:3) %>%
     pull(cas)
-
 filter(cas, CASRN_nohyphens %in% top3chems) %>% pull(ej_name)
+
+usa_sums = emissions_dmrnei_priority_allUSA %>%
+    group_by(cas) %>%
+    summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+    rename(load_lb_usa = load_lb)
+
+pcts_by_loc = left_join(loc_cas_sums, usa_sums, by = 'cas') %>%
+    mutate(pct_usa = load_lb / load_lb_usa * 100) %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
+    relocate(ej_name, .after = 'cas')
+
+#get percents by location and year
+
+loc_cas_sums_yr = emissions_dmrnei_priority_11_18 %>%
+    group_by(target_location, cas, year) %>%
+    summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+    ungroup() %>%
+    arrange(target_location, desc(load_lb))
+
+usa_sums_yr = emissions_dmrnei_priority_allUSA %>%
+    group_by(cas, year) %>%
+    summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+    rename(load_lb_usa = load_lb)
+
+pcts_by_loc_yr = left_join(loc_cas_sums_yr, usa_sums_yr, by = c('cas', 'year')) %>%
+    mutate(pct_usa = load_lb / load_lb_usa * 100) %>%
+    left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
+    relocate(ej_name, .after = 'cas')
+
+arrange(pcts_by_loc, desc(pct_usa))
+arrange(pcts_by_loc_yr, desc(pct_usa))
+
+write_csv(pcts_by_loc, 'data/pct_usa_by_location.csv')
+write_csv(pcts_by_loc_yr, 'data/pct_usa_by_location_year.csv')
+
+#plot
+
+pcts_by_loc %>%
+    # filter(ej_name %in% top3chems) %>%
+    ggplot(aes(x = reorder(ej_name, -pct_usa), y = pct_usa)) +
+    geom_bar(position = 'stack', stat = 'identity', col = 'gray30', fill = 'lightblue') +
+    facet_wrap(.~target_location) +
+    labs(title = 'Percentage of U.S. emissions contributed by four industrial centers',
+         y = 'Percent USA total') +
+    guides(x = guide_axis(angle = 55)) +
+    theme_bw() +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          axis.title.x = element_blank())
+
+ggsave('figs/plots/percent_usa_totals.png', width = 8, height = 8)
+
+pcts_by_loc %>%
+    rename(`Industrial Center` = target_location) %>%
+    ggplot(aes(x = reorder(ej_name, -pct_usa), y = pct_usa, fill = `Industrial Center`)) +
+    geom_bar(position = 'stack', stat = 'identity') +
+    labs(title = 'Percentage of U.S. emissions contributed by four industrial centers',
+         y = 'Percent USA total') +
+    guides(x = guide_axis(angle = 55)) +
+    theme_bw() +
+    # scale_fill_brewer(palette = 'Set1') +
+    scale_fill_viridis_d(option = 'D') +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          axis.title.x = element_blank())
+
+ggsave('figs/plots/percent_usa_totals2.png', width = 8, height = 8)
+
+pcts_by_loc_yr %>%
+    rename(`Industrial Center` = target_location) %>%
+    ggplot(aes(x = reorder(cas, -pct_usa), y = pct_usa, fill = `Industrial Center`)) +
+    geom_bar(position = 'stack', stat = 'identity') +
+    labs(title = 'Percentage of U.S. emissions contributed by four industrial centers',
+         y = 'Percent USA total') +
+    guides(x = guide_axis(angle = 70)) +
+    theme_bw() +
+    facet_wrap(.~year) +
+    scale_fill_viridis_d(option = 'D') +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          axis.title.x = element_blank())
+
+ggsave('figs/plots/percent_usa_totals3.png', width = 8, height = 8)
