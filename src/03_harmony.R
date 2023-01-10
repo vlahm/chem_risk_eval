@@ -316,3 +316,24 @@ write_csv(out, 'data/emissions_harmonized_epamethod_NEIDMRpriority_2010-22.csv')
 # write_csv(out, 'data/emissions_harmonized_epamethod_TRIpriority_2010-22.csv')
 # write_csv(out, 'data/emissions_harmonized_excess_assigned_to_cty_centroid_2010-22.csv')
 # write_csv(out_avg_load_distributed, 'data/emissions_harmonized_excess_distributed_evenly_2010-22.csv')
+
+
+# separately, combine data for the whole nation ####
+
+dmr = read_csv('data/stewi_data_dmr_allUSA_triPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+nei = read_csv('data/stewi_data_nei_allUSA_triPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+tri = read_csv('data/stewi_data_tri_allUSA_triPriority.csv') %>%
+    mutate(cas = gsub('-', '', cas),
+           frs_id = as.character(frs_id))
+
+bind_rows(dmr, nei) %>%
+    bind_rows(tri) %>%
+    distinct(year, state, county, cas, medium, frs_id, source,
+             .keep_all = TRUE) %>%
+    write_csv('data/emissions_allUSA_TRIpriority_2011-18.csv')

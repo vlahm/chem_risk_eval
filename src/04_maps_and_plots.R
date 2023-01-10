@@ -19,11 +19,11 @@ sm = suppressMessages
 
 ## make choices here:
 
-dates = '2010-2018'
-# dates = '2010-2022'
+dates = '2011-2018'
+# dates = '2010-2022' #filtering to 2011-18 will happen later for the plots. this is just for computing stats. aways use this when building plots
 
-overlap = 'union'
-# overlap = 'setdiff'
+# overlap = 'union' #overlapping reports between TRI-DMR and TRI-NEI will be summed (unless they are within 0.5% of each other)
+overlap = 'setdiff' #overlaps are allocated to the preferred source in each comparison
 
 # setup ####
 
@@ -52,13 +52,16 @@ emissions_dmrnei_priority0 = read_csv('data/emissions_harmonized_epamethod_NEIDM
     relocate(load_lb, .after = medium) %>%
     mutate(inv_pref = 'NEI-DMR')
 
-if(dates == '2010-2018'){
-    emissions0 = filter(emissions0, year %in% 2010:2018)
-    emissions_dmrnei_priority0 = filter(emissions_dmrnei_priority0, year %in% 2010:2018)
+# resolve reporting overlap ####
+
+if(dates == '2011-2018'){
+    emissions0 = filter(emissions0, year %in% 2011:2018)
+    emissions_dmrnei_priority0 = filter(emissions_dmrnei_priority0, year %in% 2011:2018)
 }
 
 # stewi's accounting for reporting overlap just removes non-preference inventories wholesale.
-# fix that, assuming 100% overlap
+# fix that in accordance with specified "overlap" variable above
+
 cmb = bind_rows(emissions0, emissions_dmrnei_priority0) %>%
     select(-illegal, -location_set_to_county_centroid) %>%
     mutate(source = tolower(source)) %>%
@@ -256,7 +259,10 @@ sum(filter(emissions, medium == 'air')$load_lb)
 # filter(xx, year == 2011, state == 'KY', county == 'JEFFERSON', cas == 50000, frs_id == 110000378467)
 # filter(yy, year == 2011, state == 'KY', county == 'JEFFERSON', cas == 50000, frs_id == 110000378467)
 
+# setup part 2 ####
+
 emissions_11_18 = filter(emissions, year %in% 2011:2018)
+emissions_dmrnei_priority_11_18 = filter(emissions_dmrnei_priority, year %in% 2011:2018)
 
 sources = unique(emissions$source)
 
@@ -288,6 +294,12 @@ dir.create('figs/shapefiles/by_source_and_location', recursive = TRUE, showWarni
 dir.create('figs/shapefiles/by_source_and_location/by_chem', showWarnings = FALSE)
 dir.create('figs/shapefiles/by_source_and_location/by_year', showWarnings = FALSE)
 dir.create('figs/shapefiles/by_source_and_location/by_chem/by_year', showWarnings = FALSE)
+
+# write corrected files ####
+
+# write_csv(emissions_dmrnei_priority, 'data/emissions_corrected_NEIDMRpriority_2010-22.csv')
+# write_csv(emissions, 'data/emissions_corrected_TRIpriority_2010-22.csv')
+# write_csv(emissions, 'data/emissions_corrected_no_overlap_2010-22.csv')
 
 # emissions and RSEI maps, and shapefile output ####
 
@@ -777,7 +789,7 @@ wlats %>%
 
 ggsave('figs/plots/WLATS_concentrations.png', width = 8, height = 6)
 
-# venn diagram of chems by source ####
+# venn diagram of chems by source (just numbers) ####
 
 #the VennDiagram package doesn't produce the kind of diagram we want,
 #so i made that in powerpoint. The code below does all the summarizing you
@@ -819,7 +831,7 @@ names(chem_list) = sapply(sources_by_chem, function(x) as.list(x)$ej_name)
 #     disable.logging = TRUE
 # )
 
-# emissions and RSEI maps. static, final v1. ####
+# [OBSOLETE] emissions and RSEI maps. static, final v1. ####
 
 sources = list('TRI', c('DMR', 'NEI', 'NPDES'))
 
@@ -865,7 +877,7 @@ for(loc in unique(emissions$target_location)){
                 title = glue('{sr}, {lc}: Combined emissions across {nc} of 24 high-priority chemicals, 2010-22',
                              sr = ifelse(src[[1]] == 'TRI', src, 'NEI+DMR+violations'),
                              nc = length(unique(ddfilt$cas)), lc = loc),
-                fileout = glue('figs/plots/final_maps/{sr}_{lc}_load.png',
+                fileout = glue('figs/plots/tri_priority_maps/{sr}_{lc}_load.png',
                                sr = ifelse(src[[1]] == 'TRI', tolower(src), 'nei-dmr'),
                                lc = gsub(' ', '_', tolower(loc))),
                 plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
@@ -889,7 +901,7 @@ for(loc in unique(emissions$target_location)){
                     title = glue('{sr}, {lc}: RSEI-weighted emissions across {nc} of 24 high-priority chemicals, 2010-22',
                                  sr = ifelse(src[[1]] == 'TRI', src, 'NEI+DMR+violations'),
                                  nc = length(unique(ddo_rsei_f$cas)), lc = loc),
-                    fileout = glue('figs/plots/final_maps/{sr}_{lc}_rsei.png',
+                    fileout = glue('figs/plots/tri_priority_maps/{sr}_{lc}_rsei.png',
                                    sr = ifelse(src[[1]] == 'TRI', tolower(src), 'nei-dmr'),
                                    lc = gsub(' ', '_', tolower(loc))),
                     type = 'rsei', plot_locations = FALSE,
@@ -912,13 +924,11 @@ for(loc in unique(emissions$target_location)){
 #     image_animate(fps=4) %>% # animates, can opt for number of loops
 #     image_write("FileName.gif") # write to current dir
 
-# emissions maps. static, final v2-3. ####
+# emissions maps. static, final v2-3 (tri priority). ####
 
-# sources = list('TRI', c('DMR', 'NEI', 'NPDES'))
-
-file.create('figs/plots/facility_counts.txt')
-dir.create('figs/plots/final_map_chemlists')
-file.create('figs/plots/final_map_chemlists/tri_only_louisville.txt')
+file.create('figs/plots/facility_counts_tripriority.txt')
+dir.create('figs/plots/tri_priority_map_chemlists')
+file.create('figs/plots/tri_priority_map_chemlists/tri_only_louisville.txt')
 
 for(loc in unique(emissions_11_18$target_location)){
 
@@ -966,7 +976,7 @@ for(loc in unique(emissions_11_18$target_location)){
     #            chm = paste(tri_chem, collapse = ', ')))
     print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(tri_cas)))
     write_lines(tri_chem,
-                glue('figs/plots/final_map_chemlists/tri_only_{lc}.txt',
+                glue('figs/plots/tri_priority_map_chemlists/tri_only_{lc}.txt',
                      lc = sub(' ', '_', tolower(loc))))
 
     ddo = ddfilt %>%
@@ -975,13 +985,13 @@ for(loc in unique(emissions_11_18$target_location)){
                   .groups = 'drop')
 
     write_lines(glue('{loc}, TRI, TRI chems: {nrow(ddo)} facilities'),
-                glue('figs/plots/facility_counts.txt'), append = TRUE)
+                glue('figs/plots/facility_counts_tripriority.txt'), append = TRUE)
 
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
         title = '', point_color = 'blue',
-        fileout = glue('figs/plots/final_maps/tri_{lc}_trichems.png',
+        fileout = glue('figs/plots/tri_priority_maps/tri_{lc}_trichems.png',
                        lc = sub(' ', '_', tolower(loc))),
         plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
 
@@ -1013,13 +1023,13 @@ for(loc in unique(emissions_11_18$target_location)){
                   .groups = 'drop')
 
     write_lines(glue('{loc}, DMR+NEI, TRI chems: {nrow(ddo)} facilities'),
-                glue('figs/plots/facility_counts.txt'), append = TRUE)
+                glue('figs/plots/facility_counts_tripriority.txt'), append = TRUE)
 
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
         title = '', point_color = 'blue',
-        fileout = glue('figs/plots/final_maps/dmr_nei_{lc}_trichems.png',
+        fileout = glue('figs/plots/tri_priority_maps/dmr_nei_{lc}_trichems.png',
                        lc = sub(' ', '_', tolower(loc))),
         plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
 
@@ -1045,7 +1055,7 @@ for(loc in unique(emissions_11_18$target_location)){
     #            chm = paste(unique_chem, collapse = ', ')))
     print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
     write_lines(unique_chem,
-                glue('figs/plots/final_map_chemlists/non-tri_{lc}.txt',
+                glue('figs/plots/tri_priority_map_chemlists/non-tri_{lc}.txt',
                      lc = sub(' ', '_', tolower(loc))))
 
     ddo = ddfilt %>%
@@ -1054,13 +1064,13 @@ for(loc in unique(emissions_11_18$target_location)){
                   .groups = 'drop')
 
     write_lines(glue('{loc}, DMR+NEI, non-TRI chems: {nrow(ddo)} facilities'),
-                glue('figs/plots/facility_counts.txt'), append = TRUE)
+                glue('figs/plots/facility_counts_tripriority.txt'), append = TRUE)
 
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
         title = '', point_color = 'red',
-        fileout = glue('figs/plots/final_maps/dmr_nei_{lc}_nontrichems.png',
+        fileout = glue('figs/plots/tri_priority_maps/dmr_nei_{lc}_nontrichems.png',
                        lc = sub(' ', '_', tolower(loc))),
         plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
 
@@ -1091,13 +1101,13 @@ for(loc in unique(emissions_11_18$target_location)){
                   .groups = 'drop')
 
     write_lines(glue('{loc}, DMR+NEI, all chems: {nrow(ddo)} facilities'),
-                glue('figs/plots/facility_counts.txt'), append = TRUE)
+                glue('figs/plots/facility_counts_tripriority.txt'), append = TRUE)
 
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
         title = '', point_color = 'purple',
-        fileout = glue('figs/plots/final_maps/dmr_nei_{lc}_allchems.png',
+        fileout = glue('figs/plots/tri_priority_maps/dmr_nei_{lc}_allchems.png',
                        lc = sub(' ', '_', tolower(loc))),
         plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
 
@@ -1128,28 +1138,257 @@ for(loc in unique(emissions_11_18$target_location)){
                   .groups = 'drop')
 
     write_lines(glue('{loc}, TRI+DMR+NEI, all chems: {nrow(ddo)} facilities'),
-                glue('figs/plots/facility_counts.txt'), append = TRUE)
+                glue('figs/plots/facility_counts_tripriority.txt'), append = TRUE)
 
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
         title = '', point_color = 'purple',
-        fileout = glue('figs/plots/final_maps/tri_dmr_nei_{lc}_allchems.png',
+        fileout = glue('figs/plots/tri_priority_maps/tri_dmr_nei_{lc}_allchems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+}
+
+# emissions maps. static, final v2-3 (dmr-nei priority). ####
+
+file.create('figs/plots/facility_counts_dmrneipriority.txt')
+dir.create('figs/plots/dmr_nei_priority_map_chemlists')
+file.create('figs/plots/dmr_nei_priority_map_chemlists/tri_only_louisville.txt')
+
+for(loc in unique(emissions_dmrnei_priority_11_18$target_location)){
+
+    dd = filter(emissions_dmrnei_priority_11_18, target_location == loc)
+
+    if(loc == 'Houston'){
+        map_scale = 10
+    } else if(loc == 'Port Arthur'){
+        map_scale = 10
+    } else if(loc == 'Louisville'){
+        map_scale = 10
+    } else {
+        map_scale = 9
+    }
+
+    map_center = c(mean(dd$lon, na.rm=TRUE),
+                   mean(dd$lat, na.rm=TRUE))
+
+    expand = 0.02
+    latrange = range(dd$lat, na.rm = TRUE)
+    latrange[1] = latrange[1] - expand
+    latrange[2] = latrange[2] + expand
+    lonrange = range(dd$lon, na.rm = TRUE)
+    lonrange[1] = lonrange[1] - expand
+    lonrange[2] = lonrange[2] + expand
+
+    #tri-only
+    src = 'TRI'
+    ddfilt = filter(dd, source %in% !!src)
+
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/tri_{lc}_trichems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
+    tri_cas = unique(ddfilt$cas)
+    tri_chem = filter(cas, CASRN_nohyphens %in% tri_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(tri_cas),
+    #            chm = paste(tri_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(tri_cas)))
+    write_lines(tri_chem,
+                glue('figs/plots/dmr_nei_priority_map_chemlists/tri_only_{lc}.txt',
+                     lc = sub(' ', '_', tolower(loc))))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
+                  .groups = 'drop')
+
+    write_lines(glue('{loc}, TRI, TRI chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts_dmrneipriority.txt'), append = TRUE)
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'blue',
+        fileout = glue('figs/plots/dmr_nei_priority_maps/tri_{lc}_trichems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #nei+dmr: tri chems
+    src = c('DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+    ddfilt = filter(dd, cas %in% tri_cas)
+
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/dmr_nei_{lc}_trichems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
+                  .groups = 'drop')
+
+    write_lines(glue('{loc}, DMR+NEI, TRI chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts_dmrneipriority.txt'), append = TRUE)
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'blue',
+        fileout = glue('figs/plots/dmr_nei_priority_maps/dmr_nei_{lc}_trichems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #nei+dmr: non-tri chems
+    src = c('DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+    ddfilt = filter(dd, ! cas %in% tri_cas)
+
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/dmr_nei_{lc}_nontrichems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+    write_lines(unique_chem,
+                glue('figs/plots/dmr_nei_priority_map_chemlists/non-tri_{lc}.txt',
+                     lc = sub(' ', '_', tolower(loc))))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
+                  .groups = 'drop')
+
+    write_lines(glue('{loc}, DMR+NEI, non-TRI chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts_dmrneipriority.txt'), append = TRUE)
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'red',
+        fileout = glue('figs/plots/dmr_nei_priority_maps/dmr_nei_{lc}_nontrichems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #nei+dmr: all chems
+    src = c('DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/dmr_nei_{lc}_allchems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
+                  .groups = 'drop')
+
+    write_lines(glue('{loc}, DMR+NEI, all chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts_dmrneipriority.txt'), append = TRUE)
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'purple',
+        fileout = glue('figs/plots/dmr_nei_priority_maps/dmr_nei_{lc}_allchems.png',
+                       lc = sub(' ', '_', tolower(loc))),
+        plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
+
+    #all sources, all chems
+    src = c('TRI', 'DMR', 'NEI', 'NPDES')
+    ddfilt = filter(dd, source %in% !!src)
+
+    ddfilt %>%
+        group_by(cas) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+        ungroup() %>%
+        left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
+        mutate(`Chemical (CASRN)` = paste0(ej_name, ' (', CASRN, ')')) %>%
+        select(`Chemical (CASRN)`, load_lb) %>%
+        write_csv(glue('figs/fig_values/map_values/tri_dmr_nei_{lc}_allchems.csv',
+                       lc = sub(' ', '_', tolower(loc))))
+
+    unique_cas = unique(ddfilt$cas)
+    unique_chem = filter(cas, CASRN_nohyphens %in% unique_cas) %>% pull(ej_name)
+    # print(glue('{src}, {loc} ({cnt}): {chm}',
+    #            cnt = length(unique_cas),
+    #            chm = paste(unique_chem, collapse = ', ')))
+    print(glue('{paste(src, collapse = ", ")}, {loc} ({cnt})', cnt = length(unique_cas)))
+
+    ddo = ddfilt %>%
+        group_by(lat, lon) %>%
+        summarize(load_lb = sum(load_lb, na.rm = TRUE),
+                  .groups = 'drop')
+
+    write_lines(glue('{loc}, TRI+DMR+NEI, all chems: {nrow(ddo)} facilities'),
+                glue('figs/plots/facility_counts_dmrneipriority.txt'), append = TRUE)
+
+    ej_map2_pointsize(
+        ddo, center = map_center, scale = map_scale, res = 1/60,
+        latrange = latrange, lonrange = lonrange, addpoints = TRUE,
+        title = '', point_color = 'purple',
+        fileout = glue('figs/plots/dmr_nei_priority_maps/tri_dmr_nei_{lc}_allchems.png',
                        lc = sub(' ', '_', tolower(loc))),
         plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
 }
 
 # some quick numbers ####
 
-#tri chems by location
+sink('figs/quick_numbers.txt')
+
+print('tri chems by location')
 tri_chems = emissions_11_18 %>%
     filter(source == 'TRI') %>%
     group_by(target_location) %>%
     summarize(cas = unique(cas)) %>%
     ungroup() %>%
-    mutate(indicator = 1)
+    mutate(indicator = 1) %>%
+    print()
 
-#tri load by location
+print(glue(''))
+print('tri load by location')
 emissions_11_18 %>%
     filter(source == 'TRI') %>%
     group_by(target_location) %>%
@@ -1157,7 +1396,8 @@ emissions_11_18 %>%
               nchems = length(unique(cas))) %>%
     ungroup()
 
-#non-tri load by location (for tri chems)
+print(glue(''))
+print('non-tri load by location (for tri chems)')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
@@ -1168,7 +1408,8 @@ emissions_11_18 %>%
               nchems = length(unique(cas))) %>%
     ungroup()
 
-#non-tri load by location
+print(glue(''))
+print('non-tri load by location')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
     group_by(target_location) %>%
@@ -1176,7 +1417,8 @@ emissions_11_18 %>%
               nchems = length(unique(cas))) %>%
     ungroup()
 
-#tri chems by location
+print(glue(''))
+print('tri chems by location')
 emissions_11_18 %>%
     filter(source == 'TRI') %>%
     group_by(target_location) %>%
@@ -1185,7 +1427,8 @@ emissions_11_18 %>%
     ungroup() %>%
     as.data.frame()
 
-#tri chems reported to NEI and DMR by location
+print(glue(''))
+print('tri chems reported to NEI and DMR by location')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
@@ -1196,7 +1439,8 @@ emissions_11_18 %>%
     ungroup() %>%
     as.data.frame()
 
-#all chems reported to NEI and DMR by location
+print(glue(''))
+print('all chems reported to NEI and DMR by location')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
     group_by(target_location) %>%
@@ -1205,13 +1449,15 @@ emissions_11_18 %>%
     ungroup() %>%
     as.data.frame()
 
-#tri total load
+print(glue(''))
+print('tri total load')
 emissions_11_18 %>%
     filter(source == 'TRI') %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
 
-#non-tri total load for tri chems
+print(glue(''))
+print('non-tri total load for tri chems')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
     left_join(tri_chems, by = c('target_location', 'cas')) %>%
@@ -1219,20 +1465,23 @@ emissions_11_18 %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
 
-#non-tri total load
+print(glue(''))
+print('non-tri total load')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas)))
 
-#port arthur formaldehyde
+print(glue(''))
+print('port arthur formaldehyde')
 emissions %>%
     filter(source != 'TRI',
            cas == 50000,
            target_location == 'Port Arthur') %>%
     summarize(load_lb = sum(load_lb))
 
-#tri facility counts
+print(glue(''))
+print('tri facility counts')
 emissions_11_18 %>%
     filter(source == 'TRI') %>%
     distinct(target_location, lat, lon) %>%
@@ -1240,7 +1489,8 @@ emissions_11_18 %>%
     summarize(n = n()) %>%
     ungroup()
 
-#non-tri facility counts
+print(glue(''))
+print('non-tri facility counts')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
     distinct(target_location, lat, lon) %>%
@@ -1248,8 +1498,8 @@ emissions_11_18 %>%
     summarize(n = n()) %>%
     ungroup()
 
-#release volumes by chem, location, and source (2011-2018)
-
+print(glue(''))
+print('release volumes by chem, location, and source (2011-2018)')
 emissions_11_18 %>%
     mutate(source = ifelse(source %in% c('DMR', 'NEI', 'NPDES'), 'DMR-NEI', 'TRI')) %>%
     left_join(select(cas, cas = CASRN_nohyphens, ej_name, CASRN)) %>%
@@ -1260,6 +1510,8 @@ emissions_11_18 %>%
     arrange(target_location, ej_name) %>%
     relocate(target_location, .before = ej_name) %>%
     print(n = 100)
+
+sink()
 
 # gifs? ####
 
@@ -1278,3 +1530,137 @@ emissions_11_18 %>%
 
 # compare target locations to country at large ####
 
+emissions_allUSA0 = read_csv('data/emissions_allUSA_TRIpriority_2011-18.csv',
+                             col_types = 'icciccnnnlclc') %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    select(-load_kg) %>%
+    relocate(load_lb, .after = medium) %>%
+    mutate(inv_pref = 'TRI')
+
+emissions_dmrnei_priority_allUSA0 = read_csv('data/emissions_allUSA_DMRNEIpriority_2011-18.csv',
+                                             col_types = 'icciccnnnlclc') %>%
+    mutate(load_lb = load_kg * 2.20462) %>%
+    select(-load_kg) %>%
+    relocate(load_lb, .after = medium) %>%
+    mutate(inv_pref = 'NEI-DMR')
+
+# resolve reporting overlap
+
+# stewi's accounting for reporting overlap just removes non-preference inventories wholesale.
+# fix that in accordance with specified "overlap" variable above
+
+cmb = bind_rows(emissions_allUSA0, emissions_dmrnei_priority_allUSA0) %>%
+    select(-illegal, -location_set_to_county_centroid) %>%
+    mutate(source = tolower(source)) %>%
+    unite('src_med', source, medium, inv_pref) %>%
+    distinct(year, state, county, cas, frs_id, src_med, load_lb,
+             .keep_all = TRUE)
+
+conformed_latlongs = cmb %>%
+    select(year, state, county, cas, frs_id, src_med, lat, lon) %>%
+    group_by(year, state, county, cas, frs_id) %>%
+    summarize(lat = mean(lat),
+              lon = mean(lon)) %>%
+    ungroup() %>%
+    rename(latnew = lat, lonnew = lon)
+
+cmb = cmb %>%
+    left_join(conformed_latlongs, by = c('year', 'state', 'county', 'cas', 'frs_id')) %>%
+    select(-lat, -lon) %>%
+    rename(lat = latnew, lon = lonnew)
+
+if(overlap == 'setdiff'){
+
+    cmb = cmb %>%
+        pivot_wider(names_from = src_med, values_from = load_lb)
+
+    fixed = cmb %>%
+        mutate(
+            water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
+            water_pct_dif = water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100,
+            air_dif = tri_air_TRI - `nei_air_NEI-DMR`,
+            air_pct_dif = air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100)
+
+    dmr_surplus = ! is.na(fixed$water_dif) & fixed$water_dif < 0
+    nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif < 0
+    tri_surplus_water = ! is.na(fixed$water_dif) & fixed$water_dif > 0
+    tri_surplus_air = ! is.na(fixed$air_dif) & fixed$air_dif > 0
+    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif < 0 & fixed$water_pct_dif >= 0.5
+    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif < 0 & fixed$air_pct_dif >= 0.5
+    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif > 0 & fixed$water_pct_dif >= 0.5
+    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif > 0 & fixed$air_pct_dif >= 0.5
+
+    stat5 = sum(! is.na(fixed$water_dif) & fixed$water_pct_dif < 0.5)
+    stat6 = sum(! is.na(fixed$air_dif) & fixed$air_pct_dif < 0.5)
+
+    #remove overlap from the non-preference source
+    fixed$dmr_water_TRI[dmr_surplus] = fixed$`dmr_water_NEI-DMR`[dmr_surplus] - fixed$tri_water_TRI[dmr_surplus]
+    fixed$dmr_water_TRI[tri_surplus_water] = 0
+    fixed$`tri_water_NEI-DMR`[dmr_surplus] = 0
+    fixed$`tri_water_NEI-DMR`[tri_surplus_water] = fixed$tri_water_TRI[tri_surplus_water] - fixed$`dmr_water_NEI-DMR`[tri_surplus_water]
+    fixed$nei_air_TRI[nei_surplus] = fixed$`nei_air_NEI-DMR`[nei_surplus] - fixed$tri_air_TRI[nei_surplus]
+    fixed$nei_air_TRI[tri_surplus_air] = 0
+    fixed$`tri_air_NEI-DMR`[nei_surplus] = 0
+    fixed$`tri_air_NEI-DMR`[tri_surplus_air] = fixed$tri_air_TRI[tri_surplus_air] - fixed$`nei_air_NEI-DMR`[tri_surplus_air]
+
+    fixed$dmr_surplus = dmr_surplus_true
+    fixed$nei_surplus = nei_surplus_true
+    fixed$tri_surplus_water = tri_surplus_water_true
+    fixed$tri_surplus_air = tri_surplus_air_true
+
+    stat1 = length(na.omit(fixed$`dmr_water_NEI-DMR`))
+    stat2 = length(na.omit(fixed$`nei_air_NEI-DMR`))
+    stat3 = length(na.omit(fixed$tri_water_TRI))
+    stat4 = length(na.omit(fixed$tri_air_TRI))
+
+    fixed = fixed %>%
+        select(-water_dif, -air_dif) %>%
+        pivot_longer(ends_with(c('DMR', 'TRI'), ignore.case = FALSE),
+                     names_to = c('source', 'medium', 'inv_pref'),
+                     names_sep = '_',
+                     values_to = 'load_lb') %>%
+        mutate(source = toupper(source)) %>%
+        filter(! is.na(load_lb) & load_lb != 0)
+
+    emissions_allUSA = fixed %>%
+        filter(
+            inv_pref == 'TRI') %>%
+        select(-inv_pref)
+
+    emissions_dmrnei_priority_allUSA = fixed %>%
+        filter(
+            inv_pref == 'NEI-DMR') %>%
+        select(-inv_pref)
+
+} else {
+
+    emissions_allUSA = emissions_dmrnei_priority_allUSA = cmb %>%
+        separate(src_med, c('source', 'medium', 'inv_pref'), sep = '_') %>%
+        pivot_wider(names_from = inv_pref,
+                    values_from = load_lb) %>%
+        mutate(dif = TRI - `NEI-DMR`,
+               pct_dif = dif / (TRI * `NEI-DMR` / 2) * 100,
+               load_lb = `NEI-DMR`,
+               load_lb = case_when(! is.na(pct_dif) & pct_dif >= 0.5 ~ TRI + `NEI-DMR`,
+                                   is.na(load_lb) ~ TRI,
+                                   TRUE ~ load_lb)) %>%
+        select(-TRI, -`NEI-DMR`, -dif, -pct_dif) %>%
+        mutate(source = toupper(source))
+}
+
+# write corrected files ####
+
+# write_csv(emissions_dmrnei_priority, 'data/emissions_corrected_NEIDMRpriority_2010-22.csv')
+
+
+
+top3chems = emissions_allUSA %>%
+    group_by(target_location, cas) %>%
+    summarize(load_lb = sum(load_lb, na.rm = TRUE)) %>%
+    ungroup() %>%
+    arrange(target_location, desc(load_lb)) %>%
+    # print(n=100) %>%
+    slice(1:3) %>%
+    pull(cas)
+
+filter(cas, CASRN_nohyphens %in% top3chems) %>% pull(ej_name)

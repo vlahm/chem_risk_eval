@@ -118,6 +118,78 @@ cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined_dmrNeiPriori
 # cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_joined_TriPriority.csv'), index=False)
 # cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_joined_TriPriority.csv'), index=False)
 
+###################################
+# get all flows for whole country
+####################################
+
+facils = pd.DataFrame()
+for source in sources:
+
+    src_facils = pd.DataFrame()
+
+    for year in years:
+
+        try:
+            yr_facils = stewi.getInventoryFacilities(source, year)
+
+            src_facils = pd.concat([src_facils, yr_facils], axis=0, ignore_index=True)\
+                .drop_duplicates()
+
+        except:
+            continue
+
+    frs_ids = get_matches_for_id_list(source, src_facils['FacilityID'])
+    src_facils = src_facils.merge(frs_ids[['FRS_ID', 'FacilityID']],
+                                  on='FacilityID', how='left')\
+        .rename(columns={'FRS_ID': 'FRS ID'})
+
+    facils = pd.concat([facils, src_facils], axis=0, ignore_index=True)\
+        .drop_duplicates(subset=['FacilityID'])
+
+cmb = list()
+cmb.append(combineFullInventories({'TRI':2011, 'NEI':2011}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2012, 'NEI':2012}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2013, 'NEI':2013}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2014, 'NEI':2014, 'DMR':2014}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2015, 'NEI':2015, 'DMR':2015}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2016, 'NEI':2016, 'DMR':2016}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2017, 'NEI':2017, 'DMR':2017}, filter_for_LCI = False))
+cmb.append(combineFullInventories({'TRI':2018, 'NEI':2018, 'DMR':2018}, filter_for_LCI = False))
+
+cmb = pd.concat(cmb, axis=0)
+
+# cmb.to_csv(Path(wd, 'cmb_complete_2011-2018.csv'), index=False)
+# pd.read_csv('cmb_complete_2011-2018.csv', )
+
+cmb = cmb.merge(facils[['FacilityID', 'FRS ID', 'NAICS', 'City', 'County', 'State', 'Latitude', 'Longitude']],
+                how='right', on='FacilityID')\
+    .rename(columns={'State': 'state', 'County': 'county',# 'SRS_CAS': 'cas',
+                     'Compartment': 'medium', 'FlowAmount': 'load_kg',
+                     'Latitude': 'lat', 'Longitude': 'lon',
+                     'Source': 'source', 'Year': 'year', 'FRS ID': 'frs_id'})\
+    .drop(['SRS_CAS'], axis=1)\
+    .dropna(subset=['load_kg'])
+
+#some flows are missing cas numbers. look them up via SRS id (which is called subsKey in the chem table)
+cmb = cmb.merge(chems[['CASRN', 'subsKey_str']],
+          how='inner', left_on='SRS_ID', right_on='subsKey_str')\
+    .rename(columns={'CASRN': 'cas'})\
+    .drop(['subsKey_str'], axis=1)
+
+cmb['illegal'] = False
+cmb['location_set_to_county_centroid'] = False
+
+cmb = cmb[['year', 'state', 'county', 'cas', 'frs_id', 'medium', 'load_kg', 'lat', 'lon', 'location_set_to_county_centroid', 'source', 'illegal']]
+
+cmb = cmb.query('cas in @chems["CASRN"]')
+
+# cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_allUSA_triPriority.csv'), index=False)
+# cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_allUSA_triPriority.csv'), index=False)
+# cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_allUSA_triPriority.csv'), index=False)
+cmb.query('source == "TRI"').to_csv(Path(wd, 'stewi_data_tri_allUSA_dmrneiPriority.csv'), index=False)
+cmb.query('source == "DMR"').to_csv(Path(wd, 'stewi_data_dmr_allUSA_dmrneiPriority.csv'), index=False)
+cmb.query('source == "NEI"').to_csv(Path(wd, 'stewi_data_nei_allUSA_dmrneiPriority.csv'), index=False)
+
 #this way doesn't account for multireporting
 # for source in sources:
 #
