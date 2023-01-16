@@ -19,11 +19,13 @@ sm = suppressMessages
 
 ## make choices here:
 
-dates = '2011-2018'
-# dates = '2010-2022' #filtering to 2011-18 will happen later for the plots. this is just for computing stats. aways use this when building plots
+# dates = '2011-2018'
+dates = '2010-2022' #filtering to 2011-18 will happen later for the plots. this is just for computing stats. aways use this when building plots
 
-# overlap = 'union' #overlapping reports between TRI-DMR and TRI-NEI will be summed (unless they are within 0.5% of each other)
+# overlap = 'union' #overlapping reports between TRI-DMR and TRI-NEI will be summed (unless they are within pct_thresh of each other)
 overlap = 'setdiff' #overlaps are allocated to the preferred source in each comparison
+
+pct_thresh = 0.5 # %threshold difference required to consider overlapping flows separate (doesn't apply if overlap == 'setdiff', though will affect stats)
 
 # setup ####
 
@@ -104,9 +106,9 @@ if(overlap == 'setdiff'){
     fixed = cmb %>%
         mutate(
            water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
-           water_pct_dif = water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100,
+           water_pct_dif = abs(water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100),
            air_dif = tri_air_TRI - `nei_air_NEI-DMR`,
-           air_pct_dif = air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100)
+           air_pct_dif = abs(air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100))
         # filter((! is.na(water_dif) & water_dif != 0) |
         #            ((! is.na(air_dif) & air_dif != 0))) %>%
         # arrange(water_dif) %>%
@@ -117,13 +119,13 @@ if(overlap == 'setdiff'){
     nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif < 0
     tri_surplus_water = ! is.na(fixed$water_dif) & fixed$water_dif > 0
     tri_surplus_air = ! is.na(fixed$air_dif) & fixed$air_dif > 0
-    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif < 0 & fixed$water_pct_dif >= 0.5
-    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif < 0 & fixed$air_pct_dif >= 0.5
-    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif > 0 & fixed$water_pct_dif >= 0.5
-    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif > 0 & fixed$air_pct_dif >= 0.5
+    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif < 0 & fixed$water_pct_dif >= pct_thresh
+    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif < 0 & fixed$air_pct_dif >= pct_thresh
+    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif > 0 & fixed$water_pct_dif >= pct_thresh
+    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif > 0 & fixed$air_pct_dif >= pct_thresh
 
-    stat5 = sum(! is.na(fixed$water_dif) & fixed$water_pct_dif < 0.5)
-    stat6 = sum(! is.na(fixed$air_dif) & fixed$air_pct_dif < 0.5)
+    stat5 = sum(! is.na(fixed$water_dif) & fixed$water_pct_dif < pct_thresh)
+    stat6 = sum(! is.na(fixed$air_dif) & fixed$air_pct_dif < pct_thresh)
 
     #remove overlap from the non-preference source
     fixed$dmr_water_TRI[dmr_surplus] = fixed$`dmr_water_NEI-DMR`[dmr_surplus] - fixed$tri_water_TRI[dmr_surplus]
@@ -208,18 +210,80 @@ if(overlap == 'setdiff'){
 
 } else {
 
-    emissions = emissions_dmrnei_priority = cmb %>%
-        separate(src_med, c('source', 'medium', 'inv_pref'), sep = '_') %>%
-        pivot_wider(names_from = inv_pref,
-                    values_from = load_lb) %>%
-        mutate(dif = TRI - `NEI-DMR`,
-               pct_dif = dif / (TRI * `NEI-DMR` / 2) * 100,
-               load_lb = `NEI-DMR`,
-               load_lb = case_when(! is.na(pct_dif) & pct_dif >= 0.5 ~ TRI + `NEI-DMR`,
-                                   is.na(load_lb) ~ TRI,
-                                   TRUE ~ load_lb)) %>%
-        select(-TRI, -`NEI-DMR`, -dif, -pct_dif) %>%
-        mutate(source = toupper(source))
+    cmb = cmb %>%
+        pivot_wider(names_from = src_med, values_from = load_lb)
+
+    fixed = cmb %>%
+        mutate(
+            water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
+            water_pct_dif = abs(water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100),
+            air_dif = tri_air_TRI - `nei_air_NEI-DMR`,
+            air_pct_dif = abs(air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100))
+
+    dmr_surplus = ! is.na(fixed$water_dif) & fixed$water_dif <= 0
+    nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif <= 0
+    tri_surplus_water = ! is.na(fixed$water_dif) & fixed$water_dif >= 0
+    tri_surplus_air = ! is.na(fixed$air_dif) & fixed$air_dif >= 0
+    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif <= 0 & fixed$water_pct_dif >= pct_thresh
+    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif <= 0 & fixed$air_pct_dif >= pct_thresh
+    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif >= 0 & fixed$water_pct_dif >= pct_thresh
+    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif >= 0 & fixed$air_pct_dif >= pct_thresh
+
+    wat_olap = dmr_surplus | tri_surplus_water
+    wat_olap_true = dmr_surplus_true | tri_surplus_water_true
+    air_olap = nei_surplus | tri_surplus_air
+    air_olap_true = nei_surplus_true | tri_surplus_air_true
+
+    #combine overlap
+    real_water_emit = fixed$`dmr_water_NEI-DMR`[wat_olap_true] + fixed$tri_water_TRI[wat_olap_true]
+    fixed$dmr_water_TRI[wat_olap_true] = real_water_emit
+    fixed$`dmr_water_NEI-DMR`[wat_olap_true] = real_water_emit
+    fixed$tri_water_TRI[wat_olap_true] = real_water_emit
+    fixed$`tri_water_NEI-DMR`[wat_olap_true] = real_water_emit
+
+    real_air_emit = fixed$`nei_air_NEI-DMR`[air_olap_true] + fixed$tri_air_TRI[air_olap_true]
+    fixed$nei_air_TRI[air_olap_true] = real_air_emit
+    fixed$`nei_air_NEI-DMR`[air_olap_true] = real_air_emit
+    fixed$tri_air_TRI[air_olap_true] = real_air_emit
+    fixed$`tri_air_NEI-DMR`[air_olap_true] = real_air_emit
+
+    fixed$dmr_surplus = dmr_surplus_true
+    fixed$nei_surplus = nei_surplus_true
+    fixed$tri_surplus_water = tri_surplus_water_true
+    fixed$tri_surplus_air = tri_surplus_air_true
+
+    fixed = fixed %>%
+        select(-water_dif, -air_dif) %>%
+        pivot_longer(ends_with(c('DMR', 'TRI'), ignore.case = FALSE),
+                     names_to = c('source', 'medium', 'inv_pref'),
+                     names_sep = '_',
+                     values_to = 'load_lb') %>%
+        mutate(source = toupper(source)) %>%
+        filter(! is.na(load_lb) & load_lb != 0)
+
+    emissions = fixed %>%
+        filter(
+            inv_pref == 'TRI') %>%
+        select(-inv_pref)
+
+    emissions_dmrnei_priority = fixed %>%
+        filter(
+            inv_pref == 'NEI-DMR') %>%
+        select(-inv_pref)
+
+    # emissions = emissions_dmrnei_priority = cmb %>%
+    #     separate(src_med, c('source', 'medium', 'inv_pref'), sep = '_') %>%
+    #     pivot_wider(names_from = inv_pref,
+    #                 values_from = load_lb) %>%
+    #     mutate(dif = TRI - `NEI-DMR`,
+    #            pct_dif = dif / (TRI * `NEI-DMR` / 2) * 100,
+    #            load_lb = `NEI-DMR`,
+    #            load_lb = case_when(! is.na(pct_dif) & pct_dif >= 0 ~ TRI + `NEI-DMR`,
+    #            # load_lb = case_when(! is.na(pct_dif) & pct_dif >= 0.5 ~ TRI + `NEI-DMR`,
+    #                                is.na(load_lb) ~ TRI,
+    #                                TRUE ~ load_lb)) %>%
+    #     select(-TRI, -`NEI-DMR`, -dif, -pct_dif) %>%
+    #     mutate(source = toupper(source))
 }
 
 emissions$illegal = emissions$source == 'NPDES'
@@ -229,6 +293,8 @@ emissions_dmrnei_priority$location_set_to_county_centroid = FALSE
 
 sum(filter(emissions, medium == 'water')$load_lb)
 sum(filter(emissions, medium == 'air')$load_lb)
+sum(filter(emissions_dmrnei_priority, medium == 'water')$load_lb)
+sum(filter(emissions_dmrnei_priority, medium == 'air')$load_lb)
 
 # sum(filter(emissions, medium == 'water', source != 'NPDES')$load_lb)
 # sum(filter(emissions_dmrnei_priority, medium == 'water', source != 'NPDES')$load_lb)
@@ -1331,7 +1397,7 @@ for(loc in unique(emissions_dmrnei_priority_11_18$target_location)){
     ej_map2_pointsize(
         ddo, center = map_center, scale = map_scale, res = 1/60,
         latrange = latrange, lonrange = lonrange, addpoints = TRUE,
-        title = '', point_color = 'purple',
+        title = '', point_color = 'red',
         fileout = glue('figs/plots/dmr_nei_priority_maps/dmr_nei_{lc}_allchems.png',
                        lc = sub(' ', '_', tolower(loc))),
         plot_legend = FALSE, plot_title = FALSE, plot_locations = FALSE)
@@ -1499,6 +1565,14 @@ emissions_11_18 %>%
     ungroup()
 
 print(glue(''))
+print('total facility counts')
+emissions_11_18 %>%
+    distinct(target_location, lat, lon) %>%
+    group_by(target_location) %>%
+    summarize(n = n()) %>%
+    ungroup()
+
+print(glue(''))
 print('release volumes by chem, location, and source (2011-2018)')
 emissions_11_18 %>%
     mutate(source = ifelse(source %in% c('DMR', 'NEI', 'NPDES'), 'DMR-NEI', 'TRI')) %>%
@@ -1577,18 +1651,18 @@ if(overlap == 'setdiff'){
     fixed = cmb %>%
         mutate(
             water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
-            water_pct_dif = water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100,
+            water_pct_dif = abs(water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100),
             air_dif = tri_air_TRI - `nei_air_NEI-DMR`,
-            air_pct_dif = air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100)
+            air_pct_dif = abs(air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100))
 
     dmr_surplus = ! is.na(fixed$water_dif) & fixed$water_dif < 0
     nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif < 0
     tri_surplus_water = ! is.na(fixed$water_dif) & fixed$water_dif > 0
     tri_surplus_air = ! is.na(fixed$air_dif) & fixed$air_dif > 0
-    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif < 0 & fixed$water_pct_dif >= 0.5
-    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif < 0 & fixed$air_pct_dif >= 0.5
-    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif > 0 & fixed$water_pct_dif >= 0.5
-    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif > 0 & fixed$air_pct_dif >= 0.5
+    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif < 0 & fixed$water_pct_dif >= pct_thresh
+    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif < 0 & fixed$air_pct_dif >= pct_thresh
+    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif > 0 & fixed$water_pct_dif >= pct_thresh
+    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif > 0 & fixed$air_pct_dif >= pct_thresh
 
     #remove overlap from the non-preference source
     fixed$dmr_water_TRI[dmr_surplus] = fixed$`dmr_water_NEI-DMR`[dmr_surplus] - fixed$tri_water_TRI[dmr_surplus]
@@ -1626,20 +1700,69 @@ if(overlap == 'setdiff'){
 
 } else {
 
-    emissions_allUSA = emissions_dmrnei_priority_allUSA = cmb %>%
-        separate(src_med, c('source', 'medium', 'inv_pref'), sep = '_') %>%
-        pivot_wider(names_from = inv_pref,
-                    values_from = load_lb) %>%
-        mutate(dif = TRI - `NEI-DMR`,
-               pct_dif = dif / (TRI * `NEI-DMR` / 2) * 100,
-               load_lb = `NEI-DMR`,
-               load_lb = case_when(! is.na(pct_dif) & pct_dif >= 0.5 ~ TRI + `NEI-DMR`,
-                                   is.na(load_lb) ~ TRI,
-                                   TRUE ~ load_lb)) %>%
-        select(-TRI, -`NEI-DMR`, -dif, -pct_dif) %>%
-        mutate(source = toupper(source))
+    cmb = cmb %>%
+        pivot_wider(names_from = src_med, values_from = load_lb)
+
+    fixed = cmb %>%
+        mutate(
+            water_dif = tri_water_TRI - `dmr_water_NEI-DMR`,
+            water_pct_dif = abs(water_dif / (tri_water_TRI * `dmr_water_NEI-DMR` / 2) * 100),
+            air_dif = tri_air_TRI - `nei_air_NEI-DMR`,
+            air_pct_dif = abs(air_dif / (tri_air_TRI - `nei_air_NEI-DMR` / 2) * 100))
+
+    dmr_surplus = ! is.na(fixed$water_dif) & fixed$water_dif <= 0
+    nei_surplus = ! is.na(fixed$air_dif) & fixed$air_dif <= 0
+    tri_surplus_water = ! is.na(fixed$water_dif) & fixed$water_dif >= 0
+    tri_surplus_air = ! is.na(fixed$air_dif) & fixed$air_dif >= 0
+    dmr_surplus_true = ! is.na(fixed$water_dif) & fixed$water_dif <= 0 & fixed$water_pct_dif >= pct_thresh
+    nei_surplus_true = ! is.na(fixed$air_dif) & fixed$air_dif <= 0 & fixed$air_pct_dif >= pct_thresh
+    tri_surplus_water_true = ! is.na(fixed$water_dif) & fixed$water_dif >= 0 & fixed$water_pct_dif >= pct_thresh
+    tri_surplus_air_true = ! is.na(fixed$air_dif) & fixed$air_dif >= 0 & fixed$air_pct_dif >= pct_thresh
+
+    wat_olap = dmr_surplus | tri_surplus_water
+    wat_olap_true = dmr_surplus_true | tri_surplus_water_true
+    air_olap = nei_surplus | tri_surplus_air
+    air_olap_true = nei_surplus_true | tri_surplus_air_true
+
+    #combine overlap
+    real_water_emit = fixed$`dmr_water_NEI-DMR`[wat_olap_true] + fixed$tri_water_TRI[wat_olap_true]
+    fixed$dmr_water_TRI[wat_olap_true] = real_water_emit
+    fixed$`dmr_water_NEI-DMR`[wat_olap_true] = real_water_emit
+    fixed$tri_water_TRI[wat_olap_true] = real_water_emit
+    fixed$`tri_water_NEI-DMR`[wat_olap_true] = real_water_emit
+
+    real_air_emit = fixed$`nei_air_NEI-DMR`[air_olap_true] + fixed$tri_air_TRI[air_olap_true]
+    fixed$nei_air_TRI[air_olap_true] = real_air_emit
+    fixed$`nei_air_NEI-DMR`[air_olap_true] = real_air_emit
+    fixed$tri_air_TRI[air_olap_true] = real_air_emit
+    fixed$`tri_air_NEI-DMR`[air_olap_true] = real_air_emit
+
+    fixed$dmr_surplus = dmr_surplus_true
+    fixed$nei_surplus = nei_surplus_true
+    fixed$tri_surplus_water = tri_surplus_water_true
+    fixed$tri_surplus_air = tri_surplus_air_true
+
+    fixed = fixed %>%
+        select(-water_dif, -air_dif) %>%
+        pivot_longer(ends_with(c('DMR', 'TRI'), ignore.case = FALSE),
+                     names_to = c('source', 'medium', 'inv_pref'),
+                     names_sep = '_',
+                     values_to = 'load_lb') %>%
+        mutate(source = toupper(source)) %>%
+        filter(! is.na(load_lb) & load_lb != 0)
+
+    emissions_allUSA = fixed %>%
+        filter(
+            inv_pref == 'TRI') %>%
+        select(-inv_pref)
+
+    emissions_dmrnei_priority_allUSA = fixed %>%
+        filter(
+            inv_pref == 'NEI-DMR') %>%
+        select(-inv_pref)
 }
 
+# write_csv(emissions_dmrnei_priority_allUSA, 'data/emissions_corrected_allUSA_noOverlap_2011-18.csv')
 # write_csv(emissions_dmrnei_priority_allUSA, 'data/emissions_corrected_allUSA_NEIDMRpriority_2010-22.csv')
 # emissions_dmrnei_priority_allUSA = read_csv('data/emissions_corrected_allUSA_NEIDMRpriority_2010-22.csv')
 
@@ -1685,11 +1808,13 @@ pcts_by_loc_yr = left_join(loc_cas_sums_yr, usa_sums_yr, by = c('cas', 'year')) 
     left_join(select(cas, cas = CASRN_nohyphens, ej_name), by = 'cas') %>%
     relocate(ej_name, .after = 'cas')
 
-arrange(pcts_by_loc, desc(pct_usa))
-arrange(pcts_by_loc_yr, desc(pct_usa))
+# arrange(pcts_by_loc, desc(pct_usa))
+# arrange(pcts_by_loc_yr, desc(pct_usa))
 
-write_csv(pcts_by_loc, 'data/pct_usa_by_location.csv')
-write_csv(pcts_by_loc_yr, 'data/pct_usa_by_location_year.csv')
+# write_csv(pcts_by_loc, 'data/pct_usa_by_location_no_overlap.csv')
+# write_csv(pcts_by_loc_yr, 'data/pct_usa_by_location_year_no_overlap.csv')
+# write_csv(pcts_by_loc, 'data/pct_usa_by_location_complete_overlap.csv')
+# write_csv(pcts_by_loc_yr, 'data/pct_usa_by_location_year_complete_overlap.csv')
 
 #plot
 
@@ -1724,11 +1849,11 @@ ggsave('figs/plots/percent_usa_totals2.png', width = 8, height = 8)
 
 pcts_by_loc_yr %>%
     rename(`Industrial Center` = target_location) %>%
-    ggplot(aes(x = reorder(cas, -pct_usa), y = pct_usa, fill = `Industrial Center`)) +
+    ggplot(aes(x = reorder(ej_name, -pct_usa), y = pct_usa, fill = `Industrial Center`)) +
     geom_bar(position = 'stack', stat = 'identity') +
     labs(title = 'Percentage of U.S. emissions contributed by four industrial centers',
          y = 'Percent USA total') +
-    guides(x = guide_axis(angle = 70)) +
+    guides(x = guide_axis(angle = 90)) +
     theme_bw() +
     facet_wrap(.~year) +
     scale_fill_viridis_d(option = 'D') +
