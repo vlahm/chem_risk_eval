@@ -363,6 +363,7 @@ dir.create('figs/shapefiles/by_source_and_location/by_chem/by_year', showWarning
 
 # write corrected files ####
 
+# write_csv(emissions, 'data/emissions_corrected_TRIpriority_2010-22.csv')
 # write_csv(emissions_dmrnei_priority, 'data/emissions_corrected_NEIDMRpriority_2010-22.csv')
 # write_csv(emissions, 'data/emissions_corrected_TRIpriority_2010-22.csv')
 # write_csv(emissions, 'data/emissions_corrected_no_overlap_2010-22.csv')
@@ -1478,6 +1479,14 @@ print(glue(''))
 print('non-tri load by location')
 emissions_11_18 %>%
     filter(source != 'TRI') %>%
+    group_by(target_location) %>%
+    summarize(load_lb = sum(load_lb),
+              nchems = length(unique(cas))) %>%
+    ungroup()
+
+print(glue(''))
+print('full load by location')
+emissions_11_18 %>%
     group_by(target_location) %>%
     summarize(load_lb = sum(load_lb),
               nchems = length(unique(cas))) %>%
